@@ -1,0 +1,6 @@
+{
+  "name": "MTK - Manajemen Delegasi",
+  "description": "Aplikasi Manajemen Tugas dan Keuangan Delegasi dengan Cloud Sync Firebase (HP & Web), Anggaran Tahunan, Konversi Tanggal Hijriyah, Laporan & Simpan Nota ke Galeri HP",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

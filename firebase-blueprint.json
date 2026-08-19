@@ -1,0 +1,57 @@
+{
+  "entities": {
+    "Peserta": {
+      "title": "Peserta",
+      "description": "Data master santri dan pengurus peserta delegasi",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID PPS unik peserta", "maxLength": 50 },
+        "nama": { "type": "string", "description": "Nama lengkap peserta", "maxLength": 150 },
+        "domisili": { "type": "string", "description": "Domisili/Kota asal", "maxLength": 100 },
+        "kelas": { "type": "string", "description": "Kelas/Tingkatan", "maxLength": 50 },
+        "jabatan": { "type": "string", "description": "Jabatan di organisasi atau delegasi", "maxLength": 80 }
+      },
+      "required": ["id", "nama"]
+    },
+    "Delegasi": {
+      "title": "Delegasi",
+      "description": "Data kegiatan delegasi beserta rincian biaya dan peserta",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number", "description": "Timestamp ID kegiatan" },
+        "peserta": { "type": "array", "description": "Daftar ID PPS peserta delegasi" },
+        "tujuan": { "type": "string", "description": "Tujuan/nama kegiatan delegasi", "maxLength": 255 },
+        "tglBerangkat": { "type": "string", "description": "Tanggal dan jam keberangkatan" },
+        "tglKembali": { "type": "string", "description": "Tanggal dan jam kepulangan" },
+        "uangDibawa": { "type": "number", "description": "Nominal uang saku/anggaran dibawa" },
+        "uangTerpakai": { "type": "number", "description": "Total pengeluaran riil" },
+        "rincian": { "type": "array", "description": "Daftar rincian item pengeluaran" }
+      },
+      "required": ["id", "peserta", "tujuan", "uangDibawa", "uangTerpakai"]
+    },
+    "Anggaran": {
+      "title": "Anggaran",
+      "description": "Pengaturan pagu anggaran tahunan MTK",
+      "type": "object",
+      "properties": {
+        "saldoAnggaran": { "type": "number", "description": "Plafon saldo anggaran tahunan" },
+        "updatedAt": { "type": "string", "description": "Waktu pembaruan terakhir" }
+      },
+      "required": ["saldoAnggaran"]
+    }
+  },
+  "firestore": {
+    "/peserta/{pesertaId}": {
+      "schema": { "$ref": "#/entities/Peserta" },
+      "description": "Koleksi database master peserta delegasi"
+    },
+    "/delegasi/{delegasiId}": {
+      "schema": { "$ref": "#/entities/Delegasi" },
+      "description": "Koleksi riwayat dan laporan tugas delegasi"
+    },
+    "/config/{configId}": {
+      "schema": { "$ref": "#/entities/Anggaran" },
+      "description": "Pengaturan anggaran dan konfigurasi global sistem"
+    }
+  }
+}
