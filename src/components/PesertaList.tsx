@@ -8,18 +8,22 @@ import {
   FileUp, 
   RotateCcw, 
   Trash2, 
-  Search,
-  FileSpreadsheet,
-  Layers,
-  Download,
-  Building,
-  GraduationCap,
-  Briefcase
+  Search, 
+  FileSpreadsheet, 
+  Layers, 
+  Download, 
+  Building, 
+  GraduationCap, 
+  Briefcase,
+  Edit3,
+  Save,
+  X
 } from 'lucide-react';
 
 interface PesertaListProps {
   pesertaList: Peserta[];
   onAddPeserta: (newP: Peserta) => void;
+  onEditPeserta?: (updated: Peserta) => void;
   onDeletePeserta: (id: string) => void;
   onResetDefault: () => void;
   onImportCSV: (pesertaArray: Peserta[], mode?: 'skip' | 'update' | 'replace') => void;
@@ -28,6 +32,7 @@ interface PesertaListProps {
 export const PesertaList: React.FC<PesertaListProps> = ({
   pesertaList,
   onAddPeserta,
+  onEditPeserta,
   onDeletePeserta,
   onResetDefault,
   onImportCSV
@@ -40,6 +45,9 @@ export const PesertaList: React.FC<PesertaListProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
+  // Edit Modal State
+  const [editingPeserta, setEditingPeserta] = useState<Peserta | null>(null);
+
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanId = idPPS.trim().toUpperCase();
@@ -51,7 +59,7 @@ export const PesertaList: React.FC<PesertaListProps> = ({
     }
 
     if (pesertaList.some(p => p.id === cleanId)) {
-      alert(`ID PPS "${cleanId}" sudah digunakan. Silakan gunakan ID lain atau perbarui lewat Impor Massal.`);
+      alert(`ID PPS "${cleanId}" sudah digunakan. Silakan gunakan ID lain atau perbarui lewat tombol Edit.`);
       return;
     }
 
@@ -68,6 +76,24 @@ export const PesertaList: React.FC<PesertaListProps> = ({
     setDomisili('');
     setKelas('');
     setJabatan('');
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPeserta) return;
+
+    if (!editingPeserta.nama.trim()) {
+      alert('Nama Peserta tidak boleh kosong!');
+      return;
+    }
+
+    if (onEditPeserta) {
+      onEditPeserta(editingPeserta);
+    } else {
+      onAddPeserta(editingPeserta);
+    }
+
+    setEditingPeserta(null);
   };
 
   const handleImportModalExecute = (newItems: Peserta[], mode: 'skip' | 'update' | 'replace') => {
@@ -277,7 +303,7 @@ export const PesertaList: React.FC<PesertaListProps> = ({
                 <th className="p-3.5 font-semibold uppercase tracking-wider">Domisili</th>
                 <th className="p-3.5 font-semibold uppercase tracking-wider">Kelas</th>
                 <th className="p-3.5 font-semibold uppercase tracking-wider">Jabatan</th>
-                <th className="p-3.5 font-semibold uppercase tracking-wider text-center w-24">Hapus</th>
+                <th className="p-3.5 font-semibold uppercase tracking-wider text-center w-32">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
@@ -325,19 +351,28 @@ export const PesertaList: React.FC<PesertaListProps> = ({
                         </span>
                       </td>
                       <td className="p-3.5 text-center">
-                        <button
-                          id={`btn-delete-peserta-${p.id}`}
-                          onClick={() => {
-                            if (confirm(`Yakin ingin menghapus peserta ${p.nama} (ID: ${p.id}) dari database?`)) {
-                              onDeletePeserta(p.id);
-                            }
-                          }}
-                          className="px-2.5 py-1 text-red-600 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200 hover:border-red-600 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 mx-auto text-xs font-semibold shadow-2xs"
-                          title={`Hapus ${p.nama}`}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span className="text-[11px]">Hapus</span>
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            id={`btn-edit-peserta-${p.id}`}
+                            onClick={() => setEditingPeserta({ ...p })}
+                            className="p-1.5 text-amber-700 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer border border-amber-200/60 bg-amber-50/40"
+                            title={`Edit ${p.nama}`}
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            id={`btn-delete-peserta-${p.id}`}
+                            onClick={() => {
+                              if (confirm(`Yakin ingin menghapus peserta ${p.nama} (ID: ${p.id}) dari database?`)) {
+                                onDeletePeserta(p.id);
+                              }
+                            }}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer border border-red-200/60 bg-red-50/40"
+                            title={`Hapus ${p.nama}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -347,6 +382,112 @@ export const PesertaList: React.FC<PesertaListProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Edit Peserta Modal */}
+      {editingPeserta && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 bg-amber-100 text-amber-800 rounded-lg">
+                  <Edit3 className="w-4 h-4" />
+                </span>
+                <h3 className="text-sm font-bold text-slate-800">
+                  Edit Data Peserta: <span className="font-mono text-slate-600">{editingPeserta.id}</span>
+                </h3>
+              </div>
+              <button
+                onClick={() => setEditingPeserta(null)}
+                className="p-1 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">
+                  ID PPS (Kunci Utama)
+                </label>
+                <input
+                  type="text"
+                  disabled
+                  value={editingPeserta.id}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-100 text-slate-500 font-mono text-xs cursor-not-allowed"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">
+                  Nama Lengkap *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingPeserta.nama}
+                  onChange={(e) => setEditingPeserta({ ...editingPeserta, nama: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 focus:outline-none text-xs font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">
+                    Domisili
+                  </label>
+                  <input
+                    type="text"
+                    value={editingPeserta.domisili}
+                    onChange={(e) => setEditingPeserta({ ...editingPeserta, domisili: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 focus:outline-none text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">
+                    Kelas
+                  </label>
+                  <input
+                    type="text"
+                    value={editingPeserta.kelas}
+                    onChange={(e) => setEditingPeserta({ ...editingPeserta, kelas: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 focus:outline-none text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">
+                  Jabatan
+                </label>
+                <input
+                  type="text"
+                  value={editingPeserta.jabatan}
+                  onChange={(e) => setEditingPeserta({ ...editingPeserta, jabatan: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 focus:outline-none text-xs"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingPeserta(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Simpan Perubahan</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Bulk Import Modal */}
       <ImportPesertaModal

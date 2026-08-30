@@ -90,10 +90,8 @@ export default function App() {
     setIsSyncing(true);
 
     const unsubPeserta = subscribePeserta((data) => {
-      if (data.length > 0) {
-        setPesertaList(data);
-        localStorage.setItem(STORAGE_PESERTA, JSON.stringify(data));
-      }
+      setPesertaList(data);
+      localStorage.setItem(STORAGE_PESERTA, JSON.stringify(data));
       setIsSyncing(false);
       setIsFirebaseConnected(true);
     }, () => {
@@ -129,7 +127,7 @@ export default function App() {
   }, []);
 
   // -------------------------------------------------------------
-  // Handlers with Simultaneous Firestore & Local State Update
+  // Handlers with Direct Real-time Firestore Auto-Save
   // -------------------------------------------------------------
 
   // Handlers for Peserta
@@ -139,6 +137,15 @@ export default function App() {
       await savePesertaToFirestore(newP);
     } catch (err) {
       console.error('Failed to sync new peserta to Firebase:', err);
+    }
+  };
+
+  const handleEditPeserta = async (updatedP: Peserta) => {
+    setPesertaList(prev => prev.map(p => p.id === updatedP.id ? updatedP : p));
+    try {
+      await savePesertaToFirestore(updatedP);
+    } catch (err) {
+      console.error('Failed to sync edited peserta to Firebase:', err);
     }
   };
 
@@ -349,6 +356,7 @@ export default function App() {
             <PesertaList
               pesertaList={pesertaList}
               onAddPeserta={handleAddPeserta}
+              onEditPeserta={handleEditPeserta}
               onDeletePeserta={handleDeletePeserta}
               onResetDefault={handleResetPesertaDefault}
               onImportCSV={handleImportPesertaCSV}
