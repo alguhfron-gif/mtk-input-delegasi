@@ -15,7 +15,9 @@ import { Peserta, Delegasi } from '../types';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
+  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+  : getFirestore(app);
 
 export enum OperationType {
   CREATE = 'create',
@@ -157,7 +159,11 @@ export async function savePesertaToFirestore(peserta: Peserta): Promise<void> {
   const path = `${PESERTA_COLLECTION}/${peserta.id}`;
   try {
     const docRef = doc(db, PESERTA_COLLECTION, peserta.id);
-    await setDoc(docRef, peserta, { merge: true });
+    const dataToSave = {
+      ...peserta,
+      updatedAt: new Date().toISOString()
+    };
+    await setDoc(docRef, dataToSave, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
     throw error;
@@ -198,7 +204,11 @@ export async function batchImportPesertaToFirestore(
       
       for (const p of chunk) {
         const docRef = doc(db, PESERTA_COLLECTION, p.id);
-        batch.set(docRef, p, { merge: mode === 'update' });
+        const dataToSave = {
+          ...p,
+          updatedAt: new Date().toISOString()
+        };
+        batch.set(docRef, dataToSave, { merge: mode === 'update' });
       }
       await batch.commit();
     }

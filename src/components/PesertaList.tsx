@@ -17,7 +17,8 @@ import {
   Briefcase,
   Edit3,
   Save,
-  X
+  X,
+  CheckCircle2
 } from 'lucide-react';
 
 interface PesertaListProps {
@@ -47,6 +48,7 @@ export const PesertaList: React.FC<PesertaListProps> = ({
 
   // Edit Modal State
   const [editingPeserta, setEditingPeserta] = useState<Peserta | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,6 +78,9 @@ export const PesertaList: React.FC<PesertaListProps> = ({
     setDomisili('');
     setKelas('');
     setJabatan('');
+
+    setSuccessMsg(`Peserta "${cleanNama}" (${cleanId}) berhasil disimpan ke Cloud Firebase!`);
+    setTimeout(() => setSuccessMsg(null), 5000);
   };
 
   const handleSaveEdit = (e: React.FormEvent) => {
@@ -93,6 +98,8 @@ export const PesertaList: React.FC<PesertaListProps> = ({
       onAddPeserta(editingPeserta);
     }
 
+    setSuccessMsg(`Data peserta "${editingPeserta.nama}" (${editingPeserta.id}) berhasil diperbarui di Cloud Firebase!`);
+    setTimeout(() => setSuccessMsg(null), 5000);
     setEditingPeserta(null);
   };
 
@@ -139,6 +146,14 @@ export const PesertaList: React.FC<PesertaListProps> = ({
           </span>
         </div>
       </div>
+
+      {/* Success Notification Banner */}
+      {successMsg && (
+        <div className="p-3.5 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl flex items-center gap-2.5 text-xs font-semibold shadow-xs animate-fadeIn">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{successMsg}</span>
+        </div>
+      )}
 
       {/* Add Form - Clean Soft Card */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">

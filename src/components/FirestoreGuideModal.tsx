@@ -513,16 +513,16 @@ service cloud.firestore {
                 </pre>
               </div>
 
-              <div className="bg-white p-4.5 rounded-2xl border border-slate-200 space-y-2 text-xs text-slate-700">
+              <div className="bg-white p-4.5 rounded-2xl border border-slate-200 space-y-2.5 text-xs text-slate-700">
                 <h5 className="font-bold text-slate-800 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-amber-600" />
-                  Langkah Penerapan di Firebase Console:
+                  Cara Melihat & Mengelola Data di Firebase Console:
                 </h5>
-                <ol className="list-decimal list-inside space-y-1.5 text-slate-600 leading-relaxed pl-1">
-                  <li>Buka <strong>Firebase Console</strong> di <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" className="text-emerald-700 font-semibold underline">console.firebase.google.com</a>.</li>
-                  <li>Pilih proyek aplikasi Anda &gt; menu <strong>Firestore Database</strong> &gt; tab <strong>Rules</strong>.</li>
-                  <li>Tempelkan kode rules di atas, kemudian klik <strong>Publish</strong>.</li>
-                  <li>Database Anda telah siap digunakan dengan sinkronisasi instan real-time!</li>
+                <ol className="list-decimal list-inside space-y-2 text-slate-600 leading-relaxed pl-1">
+                  <li>Buka <strong>Firebase Console</strong> di <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" className="text-emerald-700 font-semibold underline">console.firebase.google.com</a> dan pilih proyek <code className="font-bold text-slate-800">delegasi-mtk</code>.</li>
+                  <li>Buka menu <strong>Build &gt; Firestore Database</strong> di bilah navigasi kiri.</li>
+                  <li>Anda akan langsung melihat 3 koleksi: <code className="font-mono bg-slate-100 px-1 rounded">peserta</code>, <code className="font-mono bg-slate-100 px-1 rounded">delegasi</code>, dan <code className="font-mono bg-slate-100 px-1 rounded">config</code> beserta dokumen yang disimpan.</li>
+                  <li>Untuk aturan keamanan, buka tab <strong>Rules</strong> di Firestore Database, tempelkan kode rules di atas, lalu klik <strong>Publish</strong>.</li>
                 </ol>
               </div>
             </div>
