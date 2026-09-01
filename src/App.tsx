@@ -37,7 +37,20 @@ const STORAGE_DELEGASI = 'mtk_finalv2_delegasi';
 const STORAGE_ANGGARAN = 'mtk_finalv2_anggaran';
 
 export default function App() {
-  const [activePage, setActivePage] = useState<PageView>('dashboard');
+  const [activePage, setActivePage] = useState<PageView>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab');
+      if (tabParam === 'input' || tabParam === 'inputDelegasi') return 'inputDelegasi';
+      if (tabParam === 'riwayat') return 'riwayat';
+      if (tabParam === 'peserta') return 'peserta';
+      if (tabParam === 'anggaran') return 'anggaran';
+      if (tabParam === 'backup') return 'backup';
+    } catch {
+      // ignore
+    }
+    return 'dashboard';
+  });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);

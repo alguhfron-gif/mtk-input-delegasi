@@ -2,10 +2,16 @@
 <html lang="id">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MTK Input Delegasi</title>
-    <meta name="description" content="Aplikasi Manajemen Input Delegasi MTK" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Manajemen Delegasi MTK</title>
+    <meta name="description" content="Aplikasi Manajemen Input dan Laporan Keuangan Delegasi MTK" />
     <meta name="theme-color" content="#1e40af" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Delegasi MTK" />
+    <meta name="application-name" content="Manajemen Delegasi MTK" />
+    <meta name="format-detection" content="telephone=no" />
     
     <!-- PWA Manifest & Icons -->
     <link rel="manifest" href="/manifest.json" />
@@ -13,7 +19,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
   </head>
-  <body>
+  <body class="bg-slate-50 antialiased select-none overscroll-none">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     
@@ -21,16 +27,15 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
+          navigator.serviceWorker.register('/sw.js', { scope: '/' })
             .then((registration) => {
-              console.log('PWA: ServiceWorker registration successful with scope: ', registration.scope);
+              console.log('PWA: ServiceWorker registration successful with scope:', registration.scope);
             })
             .catch((err) => {
-              console.log('PWA: ServiceWorker registration failed: ', err);
+              console.warn('PWA: ServiceWorker registration skipped/failed:', err);
             });
         });
       }
     </script>
   </body>
 </html>
-
