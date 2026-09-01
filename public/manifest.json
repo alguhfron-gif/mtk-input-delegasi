@@ -1,24 +1,23 @@
 {
-  "name": "Manajemen Delegasi MTK",
+  "name": "MTK - Manajemen Delegasi",
   "short_name": "Delegasi MTK",
-  "description": "Aplikasi Manajemen Input dan Laporan Keuangan Delegasi MTK",
+  "description": "Sistem Informasi & Manajemen Delegasi MTK, Anggaran, dan Pencatatan Real-time.",
   "start_url": "/",
   "scope": "/",
-  "id": "/",
-  "lang": "id",
+  "id": "/?source=pwa",
   "dir": "ltr",
+  "lang": "id-ID",
   "display": "standalone",
   "display_override": [
     "standalone",
     "fullscreen",
     "minimal-ui"
   ],
+  "orientation": "portrait-primary",
   "background_color": "#ffffff",
   "theme_color": "#1e40af",
-  "orientation": "any",
   "categories": [
     "productivity",
-    "education",
     "finance",
     "utilities"
   ],
@@ -50,9 +49,9 @@
   ],
   "shortcuts": [
     {
-      "name": "Tambah Delegasi",
-      "short_name": "Tambah",
-      "description": "Input data delegasi dan pengeluaran baru",
+      "name": "Input Delegasi",
+      "short_name": "Input",
+      "description": "Formulir pencatatan delegasi baru",
       "url": "/?tab=input",
       "icons": [
         {
@@ -63,10 +62,23 @@
       ]
     },
     {
-      "name": "Lihat Laporan",
-      "short_name": "Laporan",
-      "description": "Buka riwayat dan unduh laporan Excel/PDF",
+      "name": "Riwayat Delegasi",
+      "short_name": "Riwayat",
+      "description": "Lihat daftar kegiatan dan laporan",
       "url": "/?tab=riwayat",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Anggaran & Saldo",
+      "short_name": "Anggaran",
+      "description": "Pantau saldo dan sisa anggaran",
+      "url": "/?tab=anggaran",
       "icons": [
         {
           "src": "/icon-192.png",
@@ -91,5 +103,6 @@
       "form_factor": "narrow",
       "label": "Tampilan Form Input & Nota Delegasi di Smartphone"
     }
-  ]
+  ],
+  "prefer_related_applications": false
 }

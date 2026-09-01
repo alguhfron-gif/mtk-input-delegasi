@@ -3,21 +3,40 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>Manajemen Delegasi MTK</title>
-    <meta name="description" content="Aplikasi Manajemen Input dan Laporan Keuangan Delegasi MTK" />
-    <meta name="theme-color" content="#1e40af" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="Delegasi MTK" />
-    <meta name="application-name" content="Manajemen Delegasi MTK" />
-    <meta name="format-detection" content="telephone=no" />
+    <title>MTK - Manajemen Delegasi</title>
+    <meta name="description" content="Sistem Informasi & Manajemen Delegasi MTK, Anggaran, dan Pencatatan Real-time." />
     
-    <!-- PWA Manifest & Icons -->
+    <!-- OpenGraph & Social Metadata -->
+    <meta property="og:title" content="MTK - Manajemen Delegasi" />
+    <meta property="og:description" content="Sistem Informasi & Manajemen Delegasi MTK, Anggaran, dan Pencatatan Real-time." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/icon-512.png" />
+
+    <!-- PWA Web App Manifest -->
     <link rel="manifest" href="/manifest.json" />
+
+    <!-- Android / Chrome Native App Settings -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#1e40af" />
+    <meta name="application-name" content="Delegasi MTK" />
+
+    <!-- iOS / Apple Safari Native App Settings (Menghilangkan Safari Bar & Status Bar Transparan) -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Delegasi MTK" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <!-- Apple Touch Icons & Favicons -->
     <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+
+    <!-- Windows / Edge Tiles -->
+    <meta name="msapplication-TileColor" content="#1e40af" />
+    <meta name="msapplication-TileImage" content="/icon-512.png" />
+    <meta name="msapplication-navbutton-color" content="#1e40af" />
   </head>
   <body class="bg-slate-50 antialiased select-none overscroll-none">
     <div id="root"></div>
