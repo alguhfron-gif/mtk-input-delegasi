@@ -9,13 +9,15 @@ import { RiwayatLaporan } from './components/RiwayatLaporan';
 import { AnggaranTab } from './components/AnggaranTab';
 import { BackupTab } from './components/BackupTab';
 import { NotaModal } from './components/NotaModal';
+import { InstallPromptBanner } from './components/InstallPromptBanner';
 import { 
   Menu, 
   Cloud, 
   CloudCheck, 
   Smartphone, 
   Globe, 
-  RefreshCw 
+  RefreshCw,
+  Download
 } from 'lucide-react';
 import {
   subscribePeserta,
@@ -432,6 +434,9 @@ export default function App() {
           onClose={() => setSelectedNota(null)}
         />
       )}
+
+      {/* Direct Install PWA Banner & Quick Install Guide */}
+      <InstallPromptBanner />
     </div>
   );
 }
