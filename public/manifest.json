@@ -9,9 +9,8 @@
   "dir": "ltr",
   "display": "standalone",
   "display_override": [
-    "window-controls-overlay",
-    "tabbed",
     "standalone",
+    "fullscreen",
     "minimal-ui"
   ],
   "background_color": "#ffffff",

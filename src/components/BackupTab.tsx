@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { batchImportPesertaToFirestore, saveDelegasiToFirestore, saveAnggaranToFirestore } from '../lib/firebase';
 import { FirestoreGuideModal } from './FirestoreGuideModal';
+import { AndroidStudioGuideModal } from './AndroidStudioGuideModal';
 
 interface BackupTabProps {
   pesertaList: Peserta[];
@@ -36,6 +37,7 @@ export const BackupTab: React.FC<BackupTabProps> = ({
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [syncSuccessMessage, setSyncSuccessMessage] = useState<string | null>(null);
   const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
+  const [isAndroidModalOpen, setIsAndroidModalOpen] = useState(false);
 
   const handleManualPushToFirebase = async () => {
     try {
@@ -134,14 +136,25 @@ export const BackupTab: React.FC<BackupTabProps> = ({
           </div>
         </div>
 
-        <button
-          id="btn-buka-panduan-firestore"
-          onClick={() => setIsGuideModalOpen(true)}
-          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl flex items-center gap-2 shadow-xs transition-all cursor-pointer shrink-0"
-        >
-          <BookOpen className="w-4 h-4" />
-          <span>Panduan Skema & Rules Firestore</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            id="btn-buka-panduan-android"
+            onClick={() => setIsAndroidModalOpen(true)}
+            className="px-3.5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-xl flex items-center gap-2 shadow-xs transition-all cursor-pointer shrink-0"
+          >
+            <Smartphone className="w-4 h-4" />
+            <span>Kode Android Studio (APK Murni)</span>
+          </button>
+
+          <button
+            id="btn-buka-panduan-firestore"
+            onClick={() => setIsGuideModalOpen(true)}
+            className="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl flex items-center gap-2 shadow-xs transition-all cursor-pointer shrink-0"
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>Panduan Skema & Rules Firestore</span>
+          </button>
+        </div>
       </div>
 
       {/* Cloud Firebase Realtime Sync Status Card */}
@@ -334,6 +347,12 @@ export const BackupTab: React.FC<BackupTabProps> = ({
       <FirestoreGuideModal
         isOpen={isGuideModalOpen}
         onClose={() => setIsGuideModalOpen(false)}
+      />
+
+      {/* Android Studio Guide Modal */}
+      <AndroidStudioGuideModal
+        isOpen={isAndroidModalOpen}
+        onClose={() => setIsAndroidModalOpen(false)}
       />
     </div>
   );
