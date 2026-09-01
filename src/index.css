@@ -32,11 +32,53 @@
   }
 }
 
-/* Base comfortable smoothing */
+/* Base comfortable smoothing & soft interactions */
+*, *::before, *::after {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Efek Lembut Saat Menekan Kolom Input & Form Controls */
+input, textarea, select {
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+input:hover, textarea:hover, select:hover {
+  border-color: #94a3b8 !important;
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none !important;
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3.5px rgba(37, 99, 235, 0.16), 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+  transform: translateY(-1px);
+}
+
+input:active, textarea:active, select:active {
+  transform: scale(0.995);
+}
+
+/* Efek Lembut Tombol Saat Ditekan */
+button, a[role="button"] {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+button:active, a[role="button"]:active {
+  transform: scale(0.975);
+}
+
+/* Efek Lembut pada Baris Tabel & Kartu Interaktif */
+tr, .hover-soft-card {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Print CSS Rules */
