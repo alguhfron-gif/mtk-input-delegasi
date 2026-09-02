@@ -10,6 +10,7 @@ import { AnggaranTab } from './components/AnggaranTab';
 import { BackupTab } from './components/BackupTab';
 import { NotaModal } from './components/NotaModal';
 import { InstallPromptBanner } from './components/InstallPromptBanner';
+import { AndroidStudioGuideModal } from './components/AndroidStudioGuideModal';
 import { 
   Menu, 
   Cloud, 
@@ -56,6 +57,7 @@ export default function App() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [isAndroidGuideOpen, setIsAndroidGuideOpen] = useState<boolean>(false);
 
   // Data States with LocalStorage fallback
   const [pesertaList, setPesertaList] = useState<Peserta[]>(() => {
@@ -315,6 +317,7 @@ export default function App() {
         }}
         mobileOpen={mobileOpen}
         setMobileOpen={setMobileOpen}
+        onOpenAndroidGuide={() => setIsAndroidGuideOpen(true)}
       />
 
       {/* Main Content Viewport */}
@@ -339,8 +342,18 @@ export default function App() {
             </div>
           </div>
 
-          {/* Sync Status Badge (HP & Web Sync Indicator) */}
+          {/* Header Action Buttons */}
           <div className="flex items-center gap-2">
+            <button
+              id="btn-header-apk-guide"
+              onClick={() => setIsAndroidGuideOpen(true)}
+              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 rounded-xl border border-emerald-500/30 text-xs font-semibold transition-all cursor-pointer"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Kode APK Android</span>
+            </button>
+
+            {/* Sync Status Badge (HP & Web Sync Indicator) */}
             <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800/80 rounded-xl border border-slate-700 text-[11px]">
               <span className={`w-2 h-2 rounded-full ${isFirebaseConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
               <div className="flex items-center gap-1 text-slate-300">
@@ -437,6 +450,12 @@ export default function App() {
 
       {/* Direct Install PWA Banner & Quick Install Guide */}
       <InstallPromptBanner />
+
+      {/* Android Studio WebView APK Source Code & Setup Modal */}
+      <AndroidStudioGuideModal
+        isOpen={isAndroidGuideOpen}
+        onClose={() => setIsAndroidGuideOpen(false)}
+      />
     </div>
   );
 }

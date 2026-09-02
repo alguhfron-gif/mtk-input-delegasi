@@ -8,7 +8,8 @@ import {
   Wallet, 
   Database,
   X,
-  Compass
+  Compass,
+  Smartphone
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -16,13 +17,15 @@ interface SidebarProps {
   onSelectPage: (page: PageView) => void;
   mobileOpen: boolean;
   setMobileOpen: (open: boolean) => void;
+  onOpenAndroidGuide?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activePage,
   onSelectPage,
   mobileOpen,
-  setMobileOpen
+  setMobileOpen,
+  onOpenAndroidGuide
 }) => {
   const menuItems: { id: PageView; label: string; icon: React.ReactNode }[] = [
     { id: 'dashboard', label: 'Dashboard Utama', icon: <LayoutDashboard className="w-4.5 h-4.5" /> },
@@ -105,9 +108,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </nav>
 
-        {/* Footer info badge */}
-        <div className="p-4 border-t border-slate-700/50">
-          <div className="flex items-center gap-2 text-xs text-emerald-300 bg-emerald-950/40 px-3.5 py-2 rounded-xl border border-emerald-500/20">
+        {/* Footer info badge & Android APK Guide trigger */}
+        <div className="p-4 border-t border-slate-700/50 space-y-2.5">
+          {onOpenAndroidGuide && (
+            <button
+              id="sidebar-btn-apk-guide"
+              onClick={() => {
+                onOpenAndroidGuide();
+                setMobileOpen(false);
+              }}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-600/30 transition-all cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Source Code APK</span>
+              </div>
+              <span className="text-[10px] bg-emerald-500/30 text-emerald-200 px-1.5 py-0.5 rounded font-mono">
+                WebView
+              </span>
+            </button>
+          )}
+
+          <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-900/60 px-3.5 py-2 rounded-xl border border-slate-800">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
             <span className="truncate">Data Tersimpan Otomatis</span>
           </div>
