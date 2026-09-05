@@ -40,6 +40,30 @@
   </head>
   <body class="bg-slate-50 antialiased select-none overscroll-none">
     <div id="root"></div>
+    
+    <!-- Compatibility Guard untuk HP Lama & WebView Tanpa Chrome -->
+    <script>
+      // Fallback globalThis untuk WebView Android lama
+      if (typeof globalThis === 'undefined') {
+        window.globalThis = window;
+      }
+      // Deteksi jika localStorage diblokir oleh sistem webview HP
+      try {
+        var testKey = '__test_ls__';
+        window.localStorage.setItem(testKey, testKey);
+        window.localStorage.removeItem(testKey);
+      } catch (e) {
+        console.warn('Storage fallback enabled (WebView strict sandbox)');
+        var memStorage = {};
+        window.localStorage = {
+          getItem: function(k) { return memStorage[k] || null; },
+          setItem: function(k, v) { memStorage[k] = String(v); },
+          removeItem: function(k) { delete memStorage[k]; },
+          clear: function() { memStorage = {}; }
+        };
+      }
+    </script>
+
     <script type="module" src="/src/main.tsx"></script>
     
     <!-- PWA Service Worker Registration -->
@@ -56,5 +80,13 @@
         });
       }
     </script>
+    <noscript>
+      <div style="padding: 24px; text-align: center; font-family: sans-serif; background: #ffffff; color: #1e293b;">
+        <h2 style="font-size: 18px; font-weight: bold; color: #1e40af;">Aplikasi Membutuhkan JavaScript</h2>
+        <p style="font-size: 14px; margin-top: 8px; color: #64748b;">
+          Silakan aktifkan JavaScript atau pastikan WebView di perangkat Anda aktif untuk membuka aplikasi ini.
+        </p>
+      </div>
+    </noscript>
   </body>
 </html>

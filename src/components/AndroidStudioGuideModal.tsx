@@ -32,6 +32,7 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.net.http.SslError
 import android.os.Bundle
 import android.view.View
 import android.webkit.*
@@ -59,7 +60,7 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webView)
         progressBar = findViewById(R.id.progressBar)
 
-        // 1. Pengaturan WebView Murni & Cache Storage
+        // 1. Pengaturan WebView Murni (Mandiri, 100% TIDAK BUTUH GOOGLE CHROME)
         val settings: WebSettings = webView.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true // Wajib untuk sinkronisasi data lokal & Firestore
@@ -68,9 +69,11 @@ class MainActivity : AppCompatActivity() {
         settings.loadWithOverviewMode = true
         settings.allowFileAccess = true
         settings.allowContentAccess = true
+        settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+        settings.mediaPlaybackRequiresUserGesture = false
         settings.cacheMode = WebSettings.LOAD_DEFAULT
 
-        // Hardware acceleration untuk animasi lembut
+        // Hardware acceleration untuk grafis halus
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
 
         // 2. WebViewClient Murni: Mengunci semua tautan agar TIDAK MELEMPAR KE CHROME
@@ -92,6 +95,11 @@ class MainActivity : AppCompatActivity() {
                 // Semua tautan web dibuka langsung di dalam aplikasi ini (Bukan di browser Chrome)
                 view?.loadUrl(url)
                 return false
+            }
+
+            // KUNCI PENTING ANTI-BLANK: Mengatasi layar putih di HP lama / HP tanpa Google Services
+            override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
+                handler?.proceed() // Lanjutkan muat halaman tanpa crash
             }
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -343,12 +351,15 @@ class MainActivity : AppCompatActivity() {
           {/* TAB 1: STEPS */}
           {activeTab === 'steps' && (
             <div className="space-y-4">
-              <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-start gap-3.5">
-                <ShieldCheck className="w-5 h-5 text-indigo-700 shrink-0 mt-0.5" />
-                <div className="text-xs text-indigo-950 space-y-1">
-                  <p className="font-bold text-indigo-900 text-sm">Kenapa APK Sie Penganugerahan Bersih & Delegasi MTK Muncul Bar Biru?</p>
-                  <p className="text-indigo-800 leading-relaxed">
-                    Karena generator APK yang Anda gunakan sebelumnya membuat tipe <strong>TWA / Custom Tabs</strong> (yang memanggil browser Chrome). Dengan kode Android Studio di bawah, aplikasi Anda akan menjadi <strong>Native WebView Murni</strong> yang 100% terkunci di dalam layar penuh aplikasi.
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3.5">
+                <ShieldCheck className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-950 space-y-1">
+                  <p className="font-bold text-amber-900 text-sm">Kenapa Sebelumnya Tidak Bisa Dibuka di HP Tanpa Chrome?</p>
+                  <p className="text-amber-800 leading-relaxed">
+                    Generator APK lama membuat aplikasi bertipe <strong>TWA (Trusted Web Activity)</strong> yang secara paksa memanggil paket <code>com.android.chrome</code>. Jika HP tidak memiliki Google Chrome, aplikasi langsung mental.
+                  </p>
+                  <p className="text-amber-800 leading-relaxed pt-1">
+                    Kode di tab <strong>MainActivity.kt</strong> ini menggunakan <strong>Native WebView Mandiri</strong> yang berjalan menggunakan mesin internal Android apa pun (Xiaomi, Oppo, Vivo, Samsung, Huawei) <strong>100% tanpa membutuhkan Google Chrome</strong>.
                   </p>
                 </div>
               </div>
