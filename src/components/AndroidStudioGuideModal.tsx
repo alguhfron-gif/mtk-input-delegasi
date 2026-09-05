@@ -16,7 +16,7 @@ import {
 
 export const AndroidStudioGuideModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'kotlin' | 'manifest' | 'layout' | 'themes' | 'steps'>('steps');
+  const [activeTab, setActiveTab] = useState<'kotlin' | 'manifest' | 'layout' | 'themes' | 'gradle' | 'steps'>('steps');
 
   if (!isOpen) return null;
 
@@ -259,6 +259,48 @@ class MainActivity : AppCompatActivity() {
     </style>
 </resources>`;
 
+  const codeGradle = `// app/build.gradle (Module :app)
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.mtk.delegasi'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.mtk.delegasi"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+}
+
+dependencies {
+ 
+    // ✅ GUNAKAN HANYA DEPENDENSI NATIVE STANDAR:
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+}`;
+
   return (
     <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 z-50 animate-in fade-in duration-200 overflow-y-auto">
       <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden my-auto">
@@ -342,6 +384,16 @@ class MainActivity : AppCompatActivity() {
           >
             <FolderTree className="w-3.5 h-3.5" />
             <span>themes.xml</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('gradle')}
+            className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'gradle' ? 'bg-white text-indigo-700 shadow-xs font-bold' : 'hover:bg-white/60'
+            }`}
+          >
+            <FileCode2 className="w-3.5 h-3.5" />
+            <span>build.gradle (Hapus TWA)</span>
           </button>
         </div>
 
@@ -480,6 +532,35 @@ class MainActivity : AppCompatActivity() {
               </div>
               <pre className="p-4 bg-slate-900 text-slate-100 rounded-2xl text-xs font-mono overflow-x-auto leading-relaxed max-h-96 border border-slate-800">
                 <code>{codeThemes}</code>
+              </pre>
+            </div>
+          )}
+
+          {/* TAB 6: GRADLE */}
+          {activeTab === 'gradle' && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-mono font-bold text-slate-700 bg-slate-100 px-3 py-1 rounded-lg">
+                  app/build.gradle
+                </span>
+                <button
+                  onClick={() => copyToClipboard(codeGradle, 'gradle')}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer transition-all shadow-xs"
+                >
+                  {copiedKey === 'gradle' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedKey === 'gradle' ? 'Tersalin!' : 'Salin build.gradle'}</span>
+                </button>
+              </div>
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-900 leading-relaxed">
+                <strong>Hapus dependensi TWA ini di build.gradle:</strong>
+                <code className="block mt-1 font-mono text-red-700 bg-red-100/70 p-1.5 rounded">
+                  implementation 'com.google.androidbrowserhelper:androidbrowserhelper:...'<br/>
+                  implementation 'androidx.browser:browser:...'
+                </code>
+                Ganti dengan dependensi WebView native murni di bawah:
+              </div>
+              <pre className="p-4 bg-slate-900 text-slate-100 rounded-2xl text-xs font-mono overflow-x-auto leading-relaxed max-h-96 border border-slate-800">
+                <code>{codeGradle}</code>
               </pre>
             </div>
           )}
