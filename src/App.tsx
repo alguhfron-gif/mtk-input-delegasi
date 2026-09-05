@@ -7,6 +7,7 @@ import { PesertaList } from './components/PesertaList';
 import { DelegasiForm } from './components/DelegasiForm';
 import { RiwayatLaporan } from './components/RiwayatLaporan';
 import { AnggaranTab } from './components/AnggaranTab';
+import { AnalitikKeuangan } from './components/AnalitikKeuangan';
 import { BackupTab } from './components/BackupTab';
 import { NotaModal } from './components/NotaModal';
 import { InstallPromptBanner } from './components/InstallPromptBanner';
@@ -46,6 +47,7 @@ export default function App() {
       const tabParam = urlParams.get('tab');
       if (tabParam === 'input' || tabParam === 'inputDelegasi') return 'inputDelegasi';
       if (tabParam === 'riwayat') return 'riwayat';
+      if (tabParam === 'analitik') return 'analitik';
       if (tabParam === 'peserta') return 'peserta';
       if (tabParam === 'anggaran') return 'anggaran';
       if (tabParam === 'backup') return 'backup';
@@ -406,6 +408,15 @@ export default function App() {
               pesertaList={pesertaList}
               onEditDelegasi={handleStartEditDelegasi}
               onPrintNota={(delegasi) => setSelectedNota(delegasi)}
+            />
+          )}
+
+          {activePage === 'analitik' && (
+            <AnalitikKeuangan
+              delegasiList={delegasiList}
+              pesertaList={pesertaList}
+              saldoAnggaran={saldoAnggaran}
+              onNavigate={(page) => setActivePage(page)}
             />
           )}
 

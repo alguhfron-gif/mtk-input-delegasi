@@ -22,7 +22,7 @@ export interface Delegasi {
   uangTerpakai: number;
 }
 
-export type PageView = 'dashboard' | 'peserta' | 'inputDelegasi' | 'riwayat' | 'anggaran' | 'backup';
+export type PageView = 'dashboard' | 'peserta' | 'inputDelegasi' | 'riwayat' | 'analitik' | 'anggaran' | 'backup';
 
 export const DEFAULT_PESERTA: Peserta[] = [
   { id: "PPS001", nama: "Ahmad Fauzi", domisili: "Jakarta", kelas: "XII", jabatan: "Ketua" },

@@ -14,7 +14,8 @@ import {
   Download, 
   FileSpreadsheet,
   ArrowUpRight,
-  Calendar
+  Calendar,
+  TrendingUp
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -155,6 +156,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
           >
             <PlusCircle className="w-4 h-4" />
             <span>Delegasi Baru</span>
+          </button>
+
+          <button
+            id="btn-quick-analitik"
+            onClick={() => onNavigate('analitik')}
+            className="flex items-center gap-2 px-4.5 py-2.5 rounded-xl font-semibold text-xs text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-all cursor-pointer"
+          >
+            <TrendingUp className="w-4 h-4 text-emerald-700" />
+            <span>Analitik Keuangan</span>
           </button>
 
           <button

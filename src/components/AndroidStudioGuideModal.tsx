@@ -293,7 +293,10 @@ android {
 }
 
 dependencies {
- 
+    // ❌ HAPUS DEPENDENSI TWA / CHROME BERIKUT JIKA ADA DI PROYEK ANDA:
+    // implementation 'com.google.androidbrowserhelper:androidbrowserhelper:...'
+    // implementation 'androidx.browser:browser:...'
+
     // ✅ GUNAKAN HANYA DEPENDENSI NATIVE STANDAR:
     implementation 'androidx.core:core-ktx:1.12.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
