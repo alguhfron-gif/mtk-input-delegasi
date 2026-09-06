@@ -3,6 +3,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Delegasi, Peserta } from '../types';
 import { formatRupiah, formatTanggalMasehi, formatTanggalHijri, hitungDurasi } from './format';
+import { LOGO_MTK_BASE64 } from '../assets/logoData';
 
 // Helper to trigger file download cross-platform (Android, iOS, Desktop)
 export function triggerFileDownload(blob: Blob, filename: string) {
@@ -247,164 +248,243 @@ export function exportDelegasiPDF(delegasiList: Delegasi[], pesertaList: Peserta
   doc.save(filename);
 }
 
-// 3. Export Single Nota to PDF (.pdf)
+// 3. Export Single Nota to 58mm Thermal Receipt PDF (.pdf)
 export function exportNotaPDF(delegasi: Delegasi, pesertaList: Peserta[]) {
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4'
-  });
-
   const pesertaNames = delegasi.peserta.map(id => {
     const p = pesertaList.find(x => x.id === id);
     return p ? p.nama : id;
   });
 
   const totalSisa = delegasi.uangDibawa - delegasi.uangTerpakai;
-  const fileName = `Nota_Delegasi_${delegasi.id}_${delegasi.tujuan.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20)}.pdf`;
+  const fileName = `Nota_Delegasi_58mm_${delegasi.id}_${delegasi.tujuan.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 15)}.pdf`;
 
-  // Border Outer Card
-  doc.setDrawColor(203, 213, 225);
-  doc.roundedRect(15, 15, 180, 265, 3, 3, 'S');
+  // Calculate dynamic height in mm for continuous 58mm thermal receipt roll
+  const baseItemsCount = Math.max(delegasi.rincian.length, 1);
+  const itemsHeightMm = baseItemsCount * 5;
+  const pesertaHeightMm = Math.ceil(pesertaNames.join(', ').length / 30) * 4;
+  const totalHeightMm = Math.max(140 + itemsHeightMm + pesertaHeightMm, 150);
 
-  // Header
-  doc.setFillColor(30, 41, 59);
-  doc.roundedRect(25, 22, 160, 16, 2, 2, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(255, 255, 255);
-  doc.text('NOTA PENGELUARAN DELEGASI', 105, 31, { align: 'center' });
-
-  // Tujuan & Info Box
-  doc.setDrawColor(203, 213, 225);
-  doc.setFillColor(248, 250, 252);
-  doc.roundedRect(25, 42, 160, 38, 2, 2, 'FD');
-
-  // Tujuan Kegiatan
-  doc.setFontSize(8.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(71, 85, 105);
-  doc.text('TUJUAN KEGIATAN:', 29, 49);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
-  doc.setTextColor(15, 23, 42);
-  doc.text(delegasi.tujuan, 65, 49, { maxWidth: 115 });
-
-  // Anggota Delegasi
-  doc.setFontSize(8.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(71, 85, 105);
-  doc.text('ANGGOTA DELEGASI:', 29, 58);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(15, 23, 42);
-  doc.text(pesertaNames.join(', '), 65, 58, { maxWidth: 115 });
-
-  // Jadwal Berangkat & Kembali
-  doc.setFontSize(8.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(71, 85, 105);
-  doc.text('JADWAL BERANGKAT:', 29, 67);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(15, 23, 42);
-  doc.text(`${formatTanggalMasehi(delegasi.tglBerangkat)} (${formatTanggalHijri(delegasi.tglBerangkat)})`, 65, 67);
-
-  doc.setFontSize(8.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(71, 85, 105);
-  doc.text('JADWAL KEMBALI:', 29, 75);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(15, 23, 42);
-  doc.text(`${formatTanggalMasehi(delegasi.tglKembali)} (${formatTanggalHijri(delegasi.tglKembali)})`, 65, 75);
-
-  // Box Uang Dibawa
-  doc.setFillColor(241, 245, 249);
-  doc.roundedRect(25, 84, 160, 11, 2, 2, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(30, 41, 59);
-  doc.text('UANG DIBAWA:', 30, 91);
-  doc.text(formatRupiah(delegasi.uangDibawa), 180, 91, { align: 'right' });
-
-  // Rincian Pengeluaran Table
-  const tableData = delegasi.rincian.map((item, idx) => [
-    idx + 1,
-    item.nama,
-    formatRupiah(item.nominal)
-  ]);
-
-  tableData.push([
-    '',
-    'TOTAL PENGELUARAN:',
-    formatRupiah(delegasi.uangTerpakai)
-  ]);
-
-  autoTable(doc, {
-    startY: 98,
-    margin: { left: 25, right: 25 },
-    head: [['No', 'Keterangan Pengeluaran', 'Nominal']],
-    body: tableData,
-    theme: 'grid',
-    headStyles: {
-      fillColor: [51, 65, 85],
-      textColor: 255,
-      fontSize: 9,
-      fontStyle: 'bold',
-      halign: 'center'
-    },
-    styles: {
-      fontSize: 9,
-      cellPadding: 3,
-      textColor: [30, 41, 59]
-    },
-    columnStyles: {
-      0: { halign: 'center', cellWidth: 12 },
-      1: { cellWidth: 100 },
-      2: { halign: 'right', cellWidth: 48, fontStyle: 'bold' }
-    }
+  // Initialize jsPDF with exact 58mm thermal roll width
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: [58, totalHeightMm]
   });
 
-  // @ts-expect-error autoTable adds lastAutoTable to jsPDF instance
-  const finalY = doc.lastAutoTable.finalY + 6;
+  const pageWidth = 58;
+  const marginX = 3.5;
+  const printableWidth = pageWidth - marginX * 2; // 51mm
+  const rightX = pageWidth - marginX;
 
-  // Sisa Dana Box
-  doc.setDrawColor(203, 213, 225);
-  doc.setFillColor(248, 250, 252);
-  doc.roundedRect(25, finalY, 160, 12, 2, 2, 'FD');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(30, 41, 59);
-  doc.text('SISA UANG DELEGASI:', 30, finalY + 8);
-  doc.setTextColor(totalSisa >= 0 ? 5 : 220, totalSisa >= 0 ? 150 : 38, totalSisa >= 0 ? 105 : 38);
-  doc.text(formatRupiah(totalSisa), 180, finalY + 8, { align: 'right' });
+  let currentY = 5;
 
-  // Tanda Tangan
-  const sigY = Math.min(finalY + 24, 230);
-  doc.setFontSize(9);
-  doc.setTextColor(51, 65, 85);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Mengetahui,', 50, sigY, { align: 'center' });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.text('TU MTK', 50, sigY + 5, { align: 'center' });
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
+  // 1. Centered Logo MTK Sidogiri
+  try {
+    const logoSize = 13;
+    const logoX = (pageWidth - logoSize) / 2;
+    doc.addImage(LOGO_MTK_BASE64, 'PNG', logoX, currentY, logoSize, logoSize);
+    currentY += logoSize + 3;
+  } catch (err) {
+    console.warn('Could not add logo to PDF:', err);
+    currentY += 2;
+  }
+
+  // 2. Header Text (Thermal Store Style)
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(7.5);
   doc.setTextColor(15, 23, 42);
-  doc.text('MOH ALI GHUFORN', 50, sigY + 25, { align: 'center' });
+  doc.text('PONDOK PESANTREN SIDOGIRI', pageWidth / 2, currentY, { align: 'center' });
+  currentY += 3.5;
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(51, 65, 85);
-  doc.text('Ketua Delegasi,', 155, sigY, { align: 'center' });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.text('Penanggung Jawab', 155, sigY + 5, { align: 'center' });
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
+  doc.setFontSize(6.5);
+  doc.text('MTK (TAKLIMUL KITAB)', pageWidth / 2, currentY, { align: 'center' });
+  currentY += 3;
+
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(5.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Pasuruan, Jawa Timur', pageWidth / 2, currentY, { align: 'center' });
+  currentY += 3.2;
+
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(7);
   doc.setTextColor(15, 23, 42);
-  doc.text(pesertaNames[0] || '______________________', 155, sigY + 25, { align: 'center' });
+  doc.text('NOTA PENGELUARAN DELEGASI', pageWidth / 2, currentY, { align: 'center' });
+  currentY += 2.5;
 
+  // Dotted / Dashed Divider
+  const drawLine = (y: number, char = '-') => {
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    doc.text(char.repeat(34), pageWidth / 2, y, { align: 'center' });
+  };
+
+  drawLine(currentY, '=');
+  currentY += 3.5;
+
+  // 3. Metadata Info
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(6);
+  doc.setTextColor(15, 23, 42);
+  doc.text(`No. Bukti : #DEL-${String(delegasi.id).padStart(4, '0')}`, marginX, currentY);
+  currentY += 3.2;
+
+  doc.setFont('courier', 'normal');
+  doc.text(`Berangkat : ${formatTanggalMasehi(delegasi.tglBerangkat).split(',')[0]}`, marginX, currentY);
+  currentY += 2.8;
+  doc.text(`            (${formatTanggalHijri(delegasi.tglBerangkat).split(',')[0]})`, marginX, currentY);
+  currentY += 3.2;
+
+  if (delegasi.tglKembali) {
+    doc.text(`Kembali   : ${formatTanggalMasehi(delegasi.tglKembali).split(',')[0]}`, marginX, currentY);
+    currentY += 2.8;
+    doc.text(`            (${formatTanggalHijri(delegasi.tglKembali).split(',')[0]})`, marginX, currentY);
+    currentY += 3.2;
+  }
+
+  // Tujuan
+  doc.setFont('courier', 'bold');
+  doc.text('Tujuan    :', marginX, currentY);
+  doc.setFont('courier', 'normal');
+  const tujuanLines = doc.splitTextToSize(delegasi.tujuan || '-', printableWidth - 16);
+  doc.text(tujuanLines, marginX + 16, currentY);
+  currentY += Math.max(tujuanLines.length * 3, 3.5);
+
+  // Delegasi
+  doc.setFont('courier', 'bold');
+  doc.text(`Delegasi (${delegasi.peserta.length}):`, marginX, currentY);
+  currentY += 3;
+  doc.setFont('courier', 'normal');
+  const pesertaLines = doc.splitTextToSize(pesertaNames.join(', ') || '-', printableWidth);
+  doc.text(pesertaLines, marginX, currentY);
+  currentY += pesertaLines.length * 3 + 1;
+
+  drawLine(currentY);
+  currentY += 3.5;
+
+  // 4. Items List
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(6.5);
+  doc.text('RINCIAN PENGELUARAN:', marginX, currentY);
+  currentY += 3.5;
+
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(6);
+
+  if (delegasi.rincian.length === 0) {
+    doc.text('Tidak ada rincian pos pengeluaran', marginX, currentY);
+    currentY += 3.5;
+  } else {
+    delegasi.rincian.forEach((item, idx) => {
+      const itemTitle = `${idx + 1}. ${item.nama}`;
+      const nominalText = formatRupiah(item.nominal);
+      const titleLines = doc.splitTextToSize(itemTitle, printableWidth - 20);
+
+      doc.text(titleLines, marginX, currentY);
+      doc.setFont('courier', 'bold');
+      doc.text(nominalText, rightX, currentY, { align: 'right' });
+      doc.setFont('courier', 'normal');
+
+      currentY += Math.max(titleLines.length * 3, 3.5);
+    });
+  }
+
+  drawLine(currentY);
+  currentY += 3.5;
+
+  // 5. Totals
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(6.5);
+  doc.text('Uang Dibawa    :', marginX, currentY);
+  doc.text(formatRupiah(delegasi.uangDibawa), rightX, currentY, { align: 'right' });
+  currentY += 3.5;
+
+  doc.text('Uang Terpakai  :', marginX, currentY);
+  doc.text(formatRupiah(delegasi.uangTerpakai), rightX, currentY, { align: 'right' });
+  currentY += 2.5;
+
+  drawLine(currentY, '=');
+  currentY += 3.5;
+
+  // Sisa Uang Saku
+  doc.setFontSize(7.5);
+  if (totalSisa >= 0) {
+    doc.setTextColor(4, 120, 87);
+    doc.text('SISA KEMBALI   :', marginX, currentY);
+  } else {
+    doc.setTextColor(185, 28, 28);
+    doc.text('KEKURANGAN DANA:', marginX, currentY);
+  }
+  doc.text(formatRupiah(Math.abs(totalSisa)), rightX, currentY, { align: 'right' });
+  currentY += 2.5;
+
+  drawLine(currentY, '=');
+  currentY += 3.5;
+
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(5.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text(
+    totalSisa >= 0 ? '*Sisa uang disetorkan ke kas MTK' : '*Memerlukan pencairan kas pengganti',
+    pageWidth / 2,
+    currentY,
+    { align: 'center' }
+  );
+  currentY += 4;
+
+  // 6. Signatures (Mengetahui TU MTK & Penanggung Jawab)
+  drawLine(currentY);
+  currentY += 3.5;
+
+  const colLeft = marginX + printableWidth * 0.25;
+  const colRight = marginX + printableWidth * 0.75;
+
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(6);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Mengetahui,', colLeft, currentY, { align: 'center' });
+  doc.text('Ketua Delegasi,', colRight, currentY, { align: 'center' });
+  currentY += 2.8;
+
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('(TU MTK)', colLeft, currentY, { align: 'center' });
+  doc.text('(Penanggung Jawab)', colRight, currentY, { align: 'center' });
+  currentY += 9;
+
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(5.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text('MOH ALI GHUFRON', colLeft, currentY, { align: 'center' });
+  const ketuaName = pesertaNames[0] || 'Delegasi';
+  doc.text(ketuaName.slice(0, 16), colRight, currentY, { align: 'center' });
+  currentY += 3;
+
+  drawLine(currentY);
+  currentY += 3.5;
+
+  // 7. Footer
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(5);
+  doc.setTextColor(100, 116, 139);
+  const printDate = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+  const printTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  doc.text(`Dicetak: ${printDate} ${printTime}`, pageWidth / 2, currentY, { align: 'center' });
+  currentY += 2.8;
+
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(6);
+  doc.setTextColor(15, 23, 42);
+  doc.text('*** JAZAKUMULLAH KHAIRAN ***', pageWidth / 2, currentY, { align: 'center' });
+  currentY += 2.8;
+
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(4.8);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Simpan nota ini sebagai bukti sah kas', pageWidth / 2, currentY, { align: 'center' });
+
+  // Save 58mm PDF
   doc.save(fileName);
 }

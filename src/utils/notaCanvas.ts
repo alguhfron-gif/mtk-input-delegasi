@@ -1,33 +1,18 @@
 import { Delegasi, Peserta } from '../types';
 import { formatRupiah, formatTanggalMasehi, formatTanggalHijri } from './format';
+import { LOGO_MTK_BASE64 } from '../assets/logoData';
 
-// Helper to draw rounded rectangle in Canvas
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  radius: number,
-  fill = false,
-  stroke = true
-) {
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + width - radius, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-  ctx.lineTo(x + width, y + height - radius);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-  ctx.lineTo(x + radius, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-  ctx.closePath();
-  if (fill) ctx.fill();
-  if (stroke) ctx.stroke();
+// Loads image from URL or data URI with promise
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = (e) => reject(e);
+    img.src = src;
+  });
 }
 
-// Helper to wrap text into lines
+// Helper to wrap text into multiple lines given a max pixel width
 function wrapText(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -54,28 +39,18 @@ function wrapText(
   return lines;
 }
 
-// Loads image from URL or data URI with promise
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = (e) => reject(e);
-    img.src = src;
-  });
-}
-
 /**
- * Generates an ultra-crisp, high-resolution HTML5 Canvas of the Nota Pengeluaran Delegasi.
- * Width: 1200px (High-DPI for mobile phones and printing).
- * Height: Automatically calculated according to items and names.
+ * Generates an authentic 58mm Thermal Store Receipt (Struk Kasir 58mm) Canvas.
+ * Width: 480px (Standard high-resolution 58mm thermal paper roll).
+ * Height: Automatically calculated based on items & content.
+ * 100% Solid White background with pure RGB for flawless Android/iOS gallery indexing.
  */
 export async function generateNotaCanvas(
   delegasi: Delegasi,
   pesertaList: Peserta[]
 ): Promise<HTMLCanvasElement> {
   const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('Canvas 2D context not supported');
 
   const pesertaNames = delegasi.peserta.map((id) => {
@@ -84,352 +59,325 @@ export async function generateNotaCanvas(
   });
 
   const totalSisa = delegasi.uangDibawa - delegasi.uangTerpakai;
-  const canvasWidth = 1200;
-  const paddingX = 60;
-  const contentWidth = canvasWidth - paddingX * 2; // 1080px
 
-  // Calculate dynamic heights
-  // 1. Text wrapping for info box
-  ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  const tujuanLines = wrapText(ctx, delegasi.tujuan || '-', 500);
+  // 58mm Thermal Receipt Dimensions (480px width @ high-dpi)
+  const canvasWidth = 480;
+  const paddingX = 24;
+  const contentWidth = canvasWidth - paddingX * 2; // 432px
 
-  ctx.font = '17px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  const pesertaLines = wrapText(ctx, pesertaNames.join(', ') || '-', 500);
+  // Measurement context
+  ctx.font = 'bold 15px "Courier New", Courier, monospace';
+  const tujuanLines = wrapText(ctx, delegasi.tujuan || '-', contentWidth - 90);
+  
+  ctx.font = '14px "Courier New", Courier, monospace';
+  const pesertaLines = wrapText(ctx, pesertaNames.join(', ') || '-', contentWidth);
 
-  const leftBoxContentHeight = 25 + tujuanLines.length * 26 + 30 + 25 + pesertaLines.length * 24 + 20;
-  const infoBoxHeight = Math.max(leftBoxContentHeight, 180);
+  // Height estimation for items
+  let itemsHeight = 0;
+  delegasi.rincian.forEach((item) => {
+    ctx.font = '14px "Courier New", Courier, monospace';
+    const itemLines = wrapText(ctx, item.nama, contentWidth - 140);
+    itemsHeight += Math.max(itemLines.length * 20, 24) + 6;
+  });
+  if (delegasi.rincian.length === 0) {
+    itemsHeight = 30;
+  }
 
-  // 2. Table rows height
-  const rowCount = Math.max(delegasi.rincian.length, 1);
-  const tableHeaderHeight = 46;
-  const tableRowHeight = 44;
-  const tableFooterHeight = 50;
-  const tableTotalHeight = tableHeaderHeight + rowCount * tableRowHeight + tableFooterHeight;
-
-  // Total estimated canvas height
+  // Calculate total canvas height
   const baseHeight =
-    50 + // top padding
-    120 + // header (logo + title)
-    20 + // divider gap
-    infoBoxHeight + // info box
-    25 + // gap
-    65 + // uang dibawa box
-    25 + // gap
-    35 + // rincian header
-    tableTotalHeight + // table
-    25 + // gap
-    70 + // sisa box
-    35 + // gap
-    140 + // signatures
-    60; // bottom padding
+    20 + // top padding
+    70 + // logo (60px) + gap
+    105 + // header text
+    15 + // divider
+    26 + // no nota
+    24 + // tgl berangkat masehi
+    22 + // tgl berangkat hijri
+    (delegasi.tglKembali ? 40 : 0) + // tgl kembali if exists
+    tujuanLines.length * 22 + 6 + // tujuan
+    24 + // delegasi header
+    pesertaLines.length * 20 + 8 + // delegasi names
+    15 + // divider
+    30 + // rincian header
+    itemsHeight + // items list
+    15 + // divider
+    30 + // uang dibawa
+    30 + // uang terpakai
+    15 + // divider
+    36 + // sisa kembali
+    24 + // note status
+    15 + // divider
+    110 + // signatures (mengetahui & ketua)
+    15 + // divider
+    45 + // footer / barcode / thanks
+    35; // bottom paper teeth
 
   canvas.width = canvasWidth;
-  canvas.height = baseHeight;
+  canvas.height = Math.max(baseHeight, 600);
 
-  // Fill Canvas Background
-  ctx.fillStyle = '#ffffff';
+  // 1. Fill 100% Solid White Paper Background (No alpha channel to avoid Gallery decoding bugs)
+  ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, canvasWidth, canvas.height);
 
-  // Outer paper border
-  ctx.strokeStyle = '#e2e8f0';
-  ctx.lineWidth = 3;
-  roundRect(ctx, 20, 20, canvasWidth - 40, canvas.height - 40, 24, false, true);
+  let currentY = 22;
 
-  let currentY = 55;
-
-  // --- 1. HEADER WITH LOGO ON LEFT & TITLE ON RIGHT ---
-  // Draw Logo MTK Sidogiri
+  // 2. Draw Centered Logo MTK Sidogiri
   try {
-    const logoImg = await loadImage('/logo-mtk.png');
-    ctx.drawImage(logoImg, paddingX, currentY - 5, 105, 105);
-  } catch {
-    try {
-      const logoSvg = await loadImage('/logo-mtk.svg');
-      ctx.drawImage(logoSvg, paddingX, currentY - 5, 105, 105);
-    } catch {
-      // Fallback: draw geometric badge
-      ctx.fillStyle = '#0e5a5c';
-      ctx.beginPath();
-      ctx.arc(paddingX + 50, currentY + 45, 45, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 16px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('MTK', paddingX + 50, currentY + 50);
-    }
+    const logoImg = await loadImage(LOGO_MTK_BASE64);
+    const logoSize = 64;
+    const logoX = (canvasWidth - logoSize) / 2;
+    ctx.drawImage(logoImg, logoX, currentY, logoSize, logoSize);
+    currentY += logoSize + 12;
+  } catch (err) {
+    console.warn('Could not load logo for 58mm canvas:', err);
+    currentY += 10;
   }
 
-  // Header Title & Subtitle
-  const titleX = paddingX + 130;
+  // 3. Header Text (Thermal Store Header)
+  ctx.textAlign = 'center';
+  
+  ctx.fillStyle = '#111827';
+  ctx.font = 'bold 17px "Courier New", Courier, monospace';
+  ctx.fillText('PONDOK PESANTREN SIDOGIRI', canvasWidth / 2, currentY);
+  currentY += 20;
+
+  ctx.font = 'bold 15px "Courier New", Courier, monospace';
+  ctx.fillText('MTK (TAKLIMUL KITAB)', canvasWidth / 2, currentY);
+  currentY += 18;
+
+  ctx.font = '12px "Courier New", Courier, monospace';
+  ctx.fillStyle = '#4B5563';
+  ctx.fillText('Pasuruan, Jawa Timur - Indonesia', canvasWidth / 2, currentY);
+  currentY += 18;
+
+  ctx.font = 'bold 15px "Courier New", Courier, monospace';
+  ctx.fillStyle = '#111827';
+  ctx.fillText('NOTA PENGELUARAN DELEGASI', canvasWidth / 2, currentY);
+  currentY += 16;
+
+  // Helper to draw clean dotted divider line (like thermal printer)
+  const drawDottedLine = (y: number, char = '-') => {
+    ctx.font = '13px "Courier New", Courier, monospace';
+    ctx.fillStyle = '#6B7280';
+    ctx.textAlign = 'center';
+    const pattern = char.repeat(38);
+    ctx.fillText(pattern, canvasWidth / 2, y);
+  };
+
+  const drawDoubleLine = (y: number) => {
+    drawDottedLine(y, '=');
+  };
+
+  drawDoubleLine(currentY);
+  currentY += 16;
+
+  // 4. Metadata Info (Receipt Key-Value)
   ctx.textAlign = 'left';
+  ctx.font = 'bold 13px "Courier New", Courier, monospace';
+  ctx.fillStyle = '#111827';
 
-  // Title: NOTA PENGELUARAN DELEGASI
-  ctx.fillStyle = '#0f172a';
-  ctx.font = '900 32px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('NOTA PENGELUARAN DELEGASI', titleX, currentY + 40);
+  // No Nota & Tanggal
+  ctx.fillText(`No. Bukti : #DEL-${String(delegasi.id).padStart(4, '0')}`, paddingX, currentY);
+  currentY += 20;
 
-  // Subtitle: Musyawarah wa Taklimul Kitab (MTK) Sidogiri
-  ctx.fillStyle = '#475569';
-  ctx.font = '600 18px "Courier New", Courier, monospace';
-  ctx.fillText('Musyawarah wa Taklimul Kitab (MTK) Sidogiri', titleX, currentY + 70);
-
-  currentY += 115;
-
-  // Header bottom border line
-  ctx.strokeStyle = '#0f172a';
-  ctx.lineWidth = 3.5;
-  ctx.beginPath();
-  ctx.moveTo(paddingX, currentY);
-  ctx.lineTo(paddingX + contentWidth, currentY);
-  ctx.stroke();
-
-  currentY += 22;
-
-  // --- 2. INFORMATION BOX (Tujuan, Peserta, Jadwal) ---
-  ctx.fillStyle = '#f8fafc';
-  ctx.strokeStyle = '#cbd5e1';
-  ctx.lineWidth = 1.5;
-  roundRect(ctx, paddingX, currentY, contentWidth, infoBoxHeight, 16, true, true);
-
-  // Center vertical divider
-  const midX = paddingX + contentWidth / 2;
-  ctx.strokeStyle = '#e2e8f0';
-  ctx.beginPath();
-  ctx.moveTo(midX, currentY);
-  ctx.lineTo(midX, currentY + infoBoxHeight);
-  ctx.stroke();
-
-  // Left Column Content
-  let leftY = currentY + 30;
-  ctx.fillStyle = '#64748b';
-  ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('TUJUAN KEGIATAN:', paddingX + 24, leftY);
-
-  leftY += 25;
-  ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  for (const line of tujuanLines) {
-    ctx.fillText(line, paddingX + 24, leftY);
-    leftY += 26;
-  }
-
-  leftY += 12;
-  ctx.fillStyle = '#64748b';
-  ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText(`ANGGOTA DELEGASI (${delegasi.peserta.length} ORANG):`, paddingX + 24, leftY);
-
-  leftY += 24;
-  ctx.fillStyle = '#1e293b';
-  ctx.font = '600 17px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  for (const line of pesertaLines) {
-    ctx.fillText(line, paddingX + 24, leftY);
-    leftY += 24;
-  }
-
-  // Right Column Content (Jadwal)
-  let rightY = currentY + 35;
-  ctx.fillStyle = '#64748b';
-  ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('JADWAL BERANGKAT:', midX + 24, rightY);
-
-  rightY += 25;
-  ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText(formatTanggalMasehi(delegasi.tglBerangkat), midX + 24, rightY);
-
-  if (delegasi.tglBerangkat) {
-    rightY += 22;
-    ctx.fillStyle = '#0e5a5c';
-    ctx.font = '600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    ctx.fillText(`(${formatTanggalHijri(delegasi.tglBerangkat)})`, midX + 24, rightY);
-  }
-
-  rightY += 30;
-  ctx.fillStyle = '#64748b';
-  ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('JADWAL KEMBALI:', midX + 24, rightY);
-
-  rightY += 25;
-  ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText(formatTanggalMasehi(delegasi.tglKembali), midX + 24, rightY);
+  ctx.font = '13px "Courier New", Courier, monospace';
+  ctx.fillText(`Berangkat : ${formatTanggalMasehi(delegasi.tglBerangkat).split(',')[0]}`, paddingX, currentY);
+  currentY += 18;
+  ctx.fillText(`            (${formatTanggalHijri(delegasi.tglBerangkat).split(',')[0]})`, paddingX, currentY);
+  currentY += 20;
 
   if (delegasi.tglKembali) {
-    rightY += 22;
-    ctx.fillStyle = '#0e5a5c';
-    ctx.font = '600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    ctx.fillText(`(${formatTanggalHijri(delegasi.tglKembali)})`, midX + 24, rightY);
+    ctx.fillText(`Kembali   : ${formatTanggalMasehi(delegasi.tglKembali).split(',')[0]}`, paddingX, currentY);
+    currentY += 18;
+    ctx.fillText(`            (${formatTanggalHijri(delegasi.tglKembali).split(',')[0]})`, paddingX, currentY);
+    currentY += 20;
   }
 
-  currentY += infoBoxHeight + 20;
+  // Tujuan Kegiatan
+  ctx.font = 'bold 13px "Courier New", Courier, monospace';
+  ctx.fillText('Tujuan    : ', paddingX, currentY);
+  ctx.font = '13px "Courier New", Courier, monospace';
+  for (let i = 0; i < tujuanLines.length; i++) {
+    if (i === 0) {
+      ctx.fillText(tujuanLines[i], paddingX + 90, currentY);
+    } else {
+      currentY += 18;
+      ctx.fillText(tujuanLines[i], paddingX + 90, currentY);
+    }
+  }
+  currentY += 22;
 
-  // --- 3. UANG DIBAWA BOX ---
-  ctx.fillStyle = '#f8fafc';
-  ctx.strokeStyle = '#e2e8f0';
-  ctx.lineWidth = 1.5;
-  roundRect(ctx, paddingX, currentY, contentWidth, 58, 14, true, true);
+  // Delegasi
+  ctx.font = 'bold 13px "Courier New", Courier, monospace';
+  ctx.fillText(`Delegasi (${delegasi.peserta.length} Orang):`, paddingX, currentY);
+  currentY += 18;
+  ctx.font = '13px "Courier New", Courier, monospace';
+  ctx.fillStyle = '#1F2937';
+  for (const line of pesertaLines) {
+    ctx.fillText(line, paddingX, currentY);
+    currentY += 18;
+  }
 
-  ctx.fillStyle = '#334155';
-  ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText('UANG DIBAWA:', paddingX + 24, currentY + 36);
+  currentY += 4;
+  drawDottedLine(currentY);
+  currentY += 18;
 
-  ctx.fillStyle = '#0f172a';
-  ctx.font = '900 22px "Courier New", Courier, monospace';
-  ctx.textAlign = 'right';
-  ctx.fillText(formatRupiah(delegasi.uangDibawa), paddingX + contentWidth - 24, currentY + 37);
-
-  currentY += 76;
-
-  // --- 4. EXPENSES TABLE ---
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#475569';
-  ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  // 5. Rincian Pengeluaran Items (Thermal Struk Layout)
+  ctx.font = 'bold 14px "Courier New", Courier, monospace';
+  ctx.fillStyle = '#111827';
   ctx.fillText('RINCIAN PENGELUARAN:', paddingX, currentY);
+  currentY += 20;
 
-  currentY += 14;
-
-  const colWidthNo = 80;
-  const colWidthNominal = 260;
-  const colWidthKet = contentWidth - colWidthNo - colWidthNominal;
-
-  // Table Header
-  ctx.fillStyle = '#f1f5f9';
-  ctx.fillRect(paddingX, currentY, contentWidth, tableHeaderHeight);
-
-  ctx.strokeStyle = '#0f172a';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(paddingX, currentY, contentWidth, tableHeaderHeight);
-
-  // Column dividers for header
-  ctx.beginPath();
-  ctx.moveTo(paddingX + colWidthNo, currentY);
-  ctx.lineTo(paddingX + colWidthNo, currentY + tableHeaderHeight);
-  ctx.moveTo(paddingX + colWidthNo + colWidthKet, currentY);
-  ctx.lineTo(paddingX + colWidthNo + colWidthKet, currentY + tableHeaderHeight);
-  ctx.stroke();
-
-  ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('No', paddingX + colWidthNo / 2, currentY + 29);
-
-  ctx.textAlign = 'left';
-  ctx.fillText('Keterangan Pengeluaran', paddingX + colWidthNo + 18, currentY + 29);
-
-  ctx.textAlign = 'right';
-  ctx.fillText('Nominal', paddingX + contentWidth - 18, currentY + 29);
-
-  currentY += tableHeaderHeight;
-
-  // Table Rows
   if (delegasi.rincian.length === 0) {
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(paddingX, currentY, contentWidth, tableRowHeight);
-    ctx.strokeRect(paddingX, currentY, contentWidth, tableRowHeight);
-
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = 'italic 16px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Tidak ada rincian item pengeluaran.', paddingX + contentWidth / 2, currentY + 28);
-    currentY += tableRowHeight;
+    ctx.font = 'italic 13px "Courier New", Courier, monospace';
+    ctx.fillStyle = '#6B7280';
+    ctx.fillText('Tidak ada rincian pos pengeluaran', paddingX, currentY);
+    currentY += 22;
   } else {
     delegasi.rincian.forEach((item, idx) => {
-      // Row background
-      ctx.fillStyle = idx % 2 === 0 ? '#ffffff' : '#fafafa';
-      ctx.fillRect(paddingX, currentY, contentWidth, tableRowHeight);
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(paddingX, currentY, contentWidth, tableRowHeight);
+      ctx.font = '13px "Courier New", Courier, monospace';
+      ctx.fillStyle = '#111827';
+      const itemLabel = `${idx + 1}. ${item.nama}`;
+      const itemLines = wrapText(ctx, itemLabel, contentWidth - 130);
+      const nominalStr = formatRupiah(item.nominal);
 
-      // Dividers
-      ctx.beginPath();
-      ctx.moveTo(paddingX + colWidthNo, currentY);
-      ctx.lineTo(paddingX + colWidthNo, currentY + tableRowHeight);
-      ctx.moveTo(paddingX + colWidthNo + colWidthKet, currentY);
-      ctx.lineTo(paddingX + colWidthNo + colWidthKet, currentY + tableRowHeight);
-      ctx.stroke();
-
-      // No
-      ctx.fillStyle = '#334155';
-      ctx.font = '16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(String(idx + 1), paddingX + colWidthNo / 2, currentY + 27);
-
-      // Keterangan
-      ctx.textAlign = 'left';
-      ctx.fillText(item.nama, paddingX + colWidthNo + 18, currentY + 27);
-
-      // Nominal
-      ctx.textAlign = 'right';
-      ctx.font = 'bold 16px "Courier New", Courier, monospace';
-      ctx.fillText(formatRupiah(item.nominal), paddingX + contentWidth - 18, currentY + 27);
-
-      currentY += tableRowHeight;
+      // Print item title lines
+      for (let l = 0; l < itemLines.length; l++) {
+        ctx.textAlign = 'left';
+        ctx.fillText(itemLines[l], paddingX, currentY);
+        if (l === 0) {
+          // Print nominal right-aligned on first line
+          ctx.textAlign = 'right';
+          ctx.font = 'bold 13px "Courier New", Courier, monospace';
+          ctx.fillText(nominalStr, paddingX + contentWidth, currentY);
+          ctx.font = '13px "Courier New", Courier, monospace';
+        }
+        currentY += 19;
+      }
+      currentY += 3;
     });
   }
 
-  // Table Footer: Total Pengeluaran
-  ctx.fillStyle = '#f1f5f9';
-  ctx.fillRect(paddingX, currentY, contentWidth, tableFooterHeight);
-  ctx.strokeStyle = '#0f172a';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(paddingX, currentY, contentWidth, tableFooterHeight);
+  currentY += 2;
+  drawDottedLine(currentY);
+  currentY += 18;
 
-  ctx.beginPath();
-  ctx.moveTo(paddingX + colWidthNo + colWidthKet, currentY);
-  ctx.lineTo(paddingX + colWidthNo + colWidthKet, currentY + tableFooterHeight);
-  ctx.stroke();
-
-  ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillText('TOTAL PENGELUARAN:', paddingX + colWidthNo + colWidthKet - 18, currentY + 31);
-
-  ctx.font = '900 18px "Courier New", Courier, monospace';
-  ctx.fillText(formatRupiah(delegasi.uangTerpakai), paddingX + contentWidth - 18, currentY + 31);
-
-  currentY += tableFooterHeight + 22;
-
-  // --- 5. SISA UANG DELEGASI BOX ---
-  ctx.fillStyle = '#ffffff';
-  ctx.strokeStyle = '#cbd5e1';
-  ctx.lineWidth = 1.5;
-  roundRect(ctx, paddingX, currentY, contentWidth, 62, 14, true, true);
-
-  ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 17px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  // 6. Summary Totals (Store Receipt POS Format)
   ctx.textAlign = 'left';
-  ctx.fillText('SISA UANG DELEGASI:', paddingX + 24, currentY + 38);
-
-  ctx.fillStyle = totalSisa >= 0 ? '#047857' : '#dc2626';
-  ctx.font = '900 24px "Courier New", Courier, monospace';
+  ctx.font = 'bold 13px "Courier New", Courier, monospace';
+  ctx.fillStyle = '#374151';
+  ctx.fillText('Uang Dibawa    :', paddingX, currentY);
   ctx.textAlign = 'right';
-  ctx.fillText(formatRupiah(totalSisa), paddingX + contentWidth - 24, currentY + 39);
+  ctx.fillText(formatRupiah(delegasi.uangDibawa), paddingX + contentWidth, currentY);
+  currentY += 22;
 
-  currentY += 80;
+  ctx.textAlign = 'left';
+  ctx.fillText('Uang Terpakai  :', paddingX, currentY);
+  ctx.textAlign = 'right';
+  ctx.fillText(formatRupiah(delegasi.uangTerpakai), paddingX + contentWidth, currentY);
+  currentY += 16;
 
-  // --- 6. SIGNATURES ---
-  const sigLeftX = paddingX + 180;
-  const sigRightX = paddingX + contentWidth - 180;
+  drawDoubleLine(currentY);
+  currentY += 18;
+
+  // Sisa Uang Saku Kembali
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 15px "Courier New", Courier, monospace';
+  ctx.fillStyle = totalSisa >= 0 ? '#047857' : '#B91C1C';
+  ctx.fillText(totalSisa >= 0 ? 'SISA KEMBALI   :' : 'KEKURANGAN DANA:', paddingX, currentY);
+  ctx.textAlign = 'right';
+  ctx.fillText(formatRupiah(Math.abs(totalSisa)), paddingX + contentWidth, currentY);
+  currentY += 16;
+
+  drawDoubleLine(currentY);
+  currentY += 16;
+
+  // Status note
+  ctx.textAlign = 'center';
+  ctx.font = 'italic 11px "Courier New", Courier, monospace';
+  ctx.fillStyle = '#4B5563';
+  ctx.fillText(
+    totalSisa >= 0
+      ? '*Sisa uang wajib dikembalikan ke kas MTK'
+      : '*Memerlukan pencairan kas pengganti',
+    canvasWidth / 2,
+    currentY
+  );
+  currentY += 22;
+
+  // 7. Signatures (Compact 58mm Thermal layout)
+  drawDottedLine(currentY);
+  currentY += 18;
+
+  const colLeft = paddingX + contentWidth * 0.25;
+  const colRight = paddingX + contentWidth * 0.75;
 
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#1e293b';
-  ctx.font = 'bold 17px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('Mengetahui,', sigLeftX, currentY);
-  ctx.fillText('Ketua Delegasi,', sigRightX, currentY);
+  ctx.font = 'bold 12px "Courier New", Courier, monospace';
+  ctx.fillStyle = '#111827';
+  ctx.fillText('Mengetahui,', colLeft, currentY);
+  ctx.fillText('Ketua Delegasi,', colRight, currentY);
+  currentY += 15;
 
-  ctx.fillStyle = '#64748b';
-  ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('TU MTK', sigLeftX, currentY + 22);
-  ctx.fillText('Penanggung Jawab', sigRightX, currentY + 22);
+  ctx.font = '11px "Courier New", Courier, monospace';
+  ctx.fillStyle = '#6B7280';
+  ctx.fillText('(TU MTK)', colLeft, currentY);
+  ctx.fillText('(Penanggung Jawab)', colRight, currentY);
+  currentY += 50;
 
-  currentY += 95;
+  // Names
+  ctx.font = 'bold 12px "Courier New", Courier, monospace';
+  ctx.fillStyle = '#111827';
+  ctx.fillText('MOH ALI GHUFRON', colLeft, currentY);
+  const ketuaName = pesertaNames[0] || 'Delegasi';
+  ctx.fillText(ketuaName.slice(0, 18), colRight, currentY);
+  currentY += 18;
 
-  ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('MOH ALI GHUFORN', sigLeftX, currentY);
-  ctx.fillText(pesertaNames[0] || '______________________', sigRightX, currentY);
+  drawDottedLine(currentY);
+  currentY += 18;
+
+  // 8. Thermal Receipt Footer
+  ctx.textAlign = 'center';
+  ctx.font = '11px "Courier New", Courier, monospace';
+  ctx.fillStyle = '#4B5563';
+  const printDate = new Date().toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
+  const printTime = new Date().toLocaleTimeString('id-ID', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+  ctx.fillText(`Dicetak: ${printDate} ${printTime}`, canvasWidth / 2, currentY);
+  currentY += 16;
+
+  ctx.font = 'bold 12px "Courier New", Courier, monospace';
+  ctx.fillStyle = '#111827';
+  ctx.fillText('*** JAZAKUMULLAH KHAIRAN ***', canvasWidth / 2, currentY);
+  currentY += 14;
+
+  ctx.font = '10px "Courier New", Courier, monospace';
+  ctx.fillStyle = '#6B7280';
+  ctx.fillText('Simpan nota ini sebagai bukti sah kas', canvasWidth / 2, currentY);
+  currentY += 20;
+
+  // 9. Decorative Jagged Thermal Receipt Bottom Edge (Struk Gigi Kertas Kasir)
+  const toothWidth = 12;
+  const toothHeight = 6;
+  const numTeeth = Math.ceil(canvasWidth / toothWidth);
+
+  ctx.fillStyle = '#F3F4F6';
+  ctx.beginPath();
+  ctx.moveTo(0, canvas.height);
+  ctx.lineTo(0, canvas.height - toothHeight);
+  for (let i = 0; i < numTeeth; i++) {
+    const x = i * toothWidth;
+    ctx.lineTo(x + toothWidth / 2, canvas.height - toothHeight * 2);
+    ctx.lineTo(x + toothWidth, canvas.height - toothHeight);
+  }
+  ctx.lineTo(canvasWidth, canvas.height);
+  ctx.closePath();
+  ctx.fill();
 
   return canvas;
 }

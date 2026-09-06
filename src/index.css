@@ -90,6 +90,11 @@ tr, .hover-soft-card {
 
 /* Print CSS Rules */
 @media print {
+  @page {
+    size: 58mm auto;
+    margin: 2mm;
+  }
+
   body {
     background: white !important;
     color: black !important;
@@ -110,8 +115,10 @@ tr, .hover-soft-card {
   }
 
   #printable-nota {
-    padding: 0 !important;
-    margin: 0 !important;
+    width: 58mm !important;
+    max-width: 58mm !important;
+    padding: 2mm !important;
+    margin: 0 auto !important;
     box-shadow: none !important;
     border: none !important;
   }
