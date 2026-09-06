@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Delegasi, Peserta, PageView } from '../types';
-import { formatRupiah, getHijriInfo } from '../utils/format';
+import { formatRupiah, getHijriInfo, formatTanggalMasehi, formatTanggalHijri } from '../utils/format';
 import {
   ResponsiveContainer,
   BarChart,
@@ -37,7 +37,8 @@ import {
   Flame,
   TrendingDown,
   ArrowUpDown,
-  Sparkles
+  Sparkles,
+  X
 } from 'lucide-react';
 import { AnalitikKeikutsertaan } from './AnalitikKeikutsertaan';
 
@@ -104,6 +105,20 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const [chartMetric, setChartMetric] = useState<'both' | 'kegiatan' | 'nominal'>('both');
   const [tableSortBy, setTableSortBy] = useState<'calendar' | 'kegiatan-desc' | 'nominal-desc'>('calendar');
+  const [expandedMonthDelegates, setExpandedMonthDelegates] = useState<Record<number, boolean>>({});
+  const [selectedMonthKegiatanModal, setSelectedMonthKegiatanModal] = useState<{
+    bulanFull: string;
+    totalKegiatan: number;
+    uangTerpakai: number;
+    kegiatanList: Delegasi[];
+  } | null>(null);
+
+  const toggleMonthDelegates = (monthIdx: number) => {
+    setExpandedMonthDelegates(prev => ({
+      ...prev,
+      [monthIdx]: !prev[monthIdx]
+    }));
+  };
 
   // Filtered delegasi based on selected Hijri year
   const filteredDelegasi = useMemo(() => {
@@ -138,7 +153,8 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
       uangDibawa: 0,
       totalKegiatan: 0,
       hijriMonthNum: hm.monthNum,
-      pesertaListMonth: [] as { id: string; nama: string; count: number }[]
+      pesertaListMonth: [] as { id: string; nama: string; count: number }[],
+      kegiatanListMonth: [] as Delegasi[]
     }));
 
     filteredDelegasi.forEach(d => {
@@ -150,6 +166,7 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
             targetMonth.uangTerpakai += (d.uangTerpakai || 0);
             targetMonth.uangDibawa += (d.uangDibawa || 0);
             targetMonth.totalKegiatan += 1;
+            targetMonth.kegiatanListMonth.push(d);
 
             if (Array.isArray(d.peserta)) {
               d.peserta.forEach(pid => {
@@ -906,8 +923,8 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
                       {m.pesertaListMonth.length === 0 ? (
                         <span className="text-slate-400 italic text-[11px]">-</span>
                       ) : (
-                        <div className="flex flex-wrap items-center gap-1 max-w-sm">
-                          {m.pesertaListMonth.slice(0, 3).map((p) => (
+                        <div className="flex flex-wrap items-center gap-1 max-w-md">
+                          {(expandedMonthDelegates[m.bulanIndex] ? m.pesertaListMonth : m.pesertaListMonth.slice(0, 3)).map((p) => (
                             <span
                               key={p.id}
                               className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-medium border border-slate-200"
@@ -921,13 +938,44 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
                               )}
                             </span>
                           ))}
-                          {m.pesertaListMonth.length > 3 && (
-                            <span
-                              className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200 text-[10px] font-bold"
-                              title={m.pesertaListMonth.slice(3).map(p => `${p.nama} (${p.count}x)`).join(', ')}
+
+                          {m.pesertaListMonth.length > 3 && !expandedMonthDelegates[m.bulanIndex] && (
+                            <button
+                              type="button"
+                              onClick={() => toggleMonthDelegates(m.bulanIndex)}
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-[10px] font-bold cursor-pointer transition-colors shadow-2xs"
+                              title="Klik untuk melihat semua delegasi yang bertugas di bulan ini"
                             >
-                              +{m.pesertaListMonth.length - 3} lainnya
-                            </span>
+                              +{m.pesertaListMonth.length - 3} lainnya ▼
+                            </button>
+                          )}
+
+                          {m.pesertaListMonth.length > 3 && expandedMonthDelegates[m.bulanIndex] && (
+                            <button
+                              type="button"
+                              onClick={() => toggleMonthDelegates(m.bulanIndex)}
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-bold cursor-pointer transition-colors"
+                              title="Tutup daftar delegasi"
+                            >
+                              Tutup ▲
+                            </button>
+                          )}
+
+                          {/* Tombol Lihat Rincian Semua Kegiatan Bulan Ini */}
+                          {m.kegiatanListMonth.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedMonthKegiatanModal({
+                                bulanFull: m.bulanFull,
+                                totalKegiatan: m.totalKegiatan,
+                                uangTerpakai: m.uangTerpakai,
+                                kegiatanList: m.kegiatanListMonth
+                              })}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-700 hover:bg-teal-800 text-white text-[10px] font-bold transition-colors cursor-pointer ml-1 shadow-2xs"
+                              title={`Buka rincian lengkap ${m.totalKegiatan} kegiatan di bulan ${m.bulanFull}`}
+                            >
+                              <span>Lihat {m.totalKegiatan} Kegiatan</span>
+                            </button>
                           )}
                         </div>
                       )}
@@ -1119,6 +1167,122 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
         </div>
 
       </div>
+
+      {/* Modal Rincian Semua Kegiatan Bulan Ini */}
+      {selectedMonthKegiatanModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-fadeIn">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden animate-scaleUp">
+            
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 rounded-xl bg-teal-50 text-teal-700 border border-teal-200">
+                  <Calendar className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-base sm:text-lg">
+                    Rincian Kegiatan Bulan {selectedMonthKegiatanModal.bulanFull}
+                  </h3>
+                  <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
+                    <span>Total: <strong>{selectedMonthKegiatanModal.totalKegiatan} Kegiatan</strong></span>
+                    <span>•</span>
+                    <span>Pengeluaran: <strong className="text-teal-800 font-mono">{formatRupiah(selectedMonthKegiatanModal.uangTerpakai)}</strong></span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedMonthKegiatanModal(null)}
+                className="p-1.5 rounded-xl hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body: Daftar Kegiatan */}
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-3 divide-y divide-slate-100">
+              {selectedMonthKegiatanModal.kegiatanList.map((k, kIdx) => {
+                const sisa = Math.max(0, (k.uangDibawa || 0) - (k.uangTerpakai || 0));
+                return (
+                  <div key={k.id || kIdx} className={`pt-3 first:pt-0 space-y-2`}>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-teal-100 text-teal-800 font-bold text-xs flex items-center justify-center font-mono">
+                          {kIdx + 1}
+                        </span>
+                        <span className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-teal-600" />
+                          <span>{k.tujuan}</span>
+                        </span>
+                      </div>
+
+                      <div className="text-right font-mono font-bold text-xs text-emerald-700">
+                        {formatRupiah(k.uangTerpakai || 0)}
+                      </div>
+                    </div>
+
+                    {/* Tanggal & Keuangan Info */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Tgl Berangkat:</span>
+                        <span className="font-medium text-slate-700">{formatTanggalMasehi(k.tglBerangkat).split(',')[0]}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Tgl Hijriah:</span>
+                        <span className="font-medium text-teal-700">{formatTanggalHijri(k.tglBerangkat).split(',')[0]}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Uang Dibawa:</span>
+                        <span className="font-mono text-slate-600">{formatRupiah(k.uangDibawa || 0)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Sisa Kembali:</span>
+                        <span className="font-mono text-sky-700 font-semibold">{formatRupiah(sisa)}</span>
+                      </div>
+                    </div>
+
+                    {/* Delegasi yang Ditugaskan */}
+                    {Array.isArray(k.peserta) && k.peserta.length > 0 && (
+                      <div className="text-xs">
+                        <span className="text-slate-500 text-[11px] font-medium mr-1.5">Delegasi Bertugas:</span>
+                        <div className="inline-flex flex-wrap gap-1 mt-1">
+                          {k.peserta.map(pid => {
+                            const p = pesertaList.find(x => x.id === pid || x.nama.toLowerCase() === pid.toLowerCase());
+                            return (
+                              <span
+                                key={pid}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700 text-[11px] font-medium shadow-2xs"
+                              >
+                                <span>{p ? p.nama : pid}</span>
+                                {p && p.jabatan && (
+                                  <span className="text-[10px] text-slate-400">({p.jabatan})</span>
+                                )}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedMonthKegiatanModal(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition-all cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );

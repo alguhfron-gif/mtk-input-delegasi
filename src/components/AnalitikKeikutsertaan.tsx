@@ -58,6 +58,14 @@ export const AnalitikKeikutsertaan: React.FC<AnalitikKeikutsertaanProps> = ({
   const [filterTab, setFilterTab] = useState<'all' | 'sering' | 'pernah' | 'belum'>('all');
   const [sortBy, setSortBy] = useState<'sering-desc' | 'sering-asc' | 'nama-asc' | 'nominal-desc'>('sering-desc');
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
+  const [expandedTujuanMap, setExpandedTujuanMap] = useState<Record<string, boolean>>({});
+
+  const toggleTujuan = (id: string) => {
+    setExpandedTujuanMap(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
 
   // Kalkulasi statistik partisipasi setiap anggota
   const allMemberStats = useMemo(() => {
@@ -597,7 +605,7 @@ export const AnalitikKeikutsertaan: React.FC<AnalitikKeikutsertaanProps> = ({
                           </span>
                         ) : (
                           <div className="flex flex-wrap items-center gap-1 max-w-xs">
-                            {member.tujuanList.slice(0, 3).map((tujuan, tIdx) => (
+                            {(expandedTujuanMap[member.id] ? member.tujuanList : member.tujuanList.slice(0, 3)).map((tujuan, tIdx) => (
                               <span
                                 key={tIdx}
                                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-medium border border-slate-200"
@@ -606,10 +614,31 @@ export const AnalitikKeikutsertaan: React.FC<AnalitikKeikutsertaanProps> = ({
                                 <span className="truncate max-w-[120px]">{tujuan}</span>
                               </span>
                             ))}
-                            {member.tujuanList.length > 3 && (
-                              <span className="px-1.5 py-0.5 rounded-md bg-teal-50 text-teal-800 text-[10px] font-bold border border-teal-200">
-                                +{member.tujuanList.length - 3} lainnya
-                              </span>
+                            {member.tujuanList.length > 3 && !expandedTujuanMap[member.id] && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  toggleTujuan(member.id);
+                                  // Sekaligus buka baris detail kegiatan jika belum terbuka agar semua kegiatannya bisa dilihat lengkap
+                                  if (expandedMemberId !== member.id) {
+                                    setExpandedMemberId(member.id);
+                                  }
+                                }}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-teal-50 hover:bg-teal-100 text-teal-800 text-[10px] font-bold border border-teal-200 cursor-pointer transition-colors shadow-2xs"
+                                title="Klik untuk melihat semua kegiatan yang tersembunyi"
+                              >
+                                +{member.tujuanList.length - 3} lainnya ▼
+                              </button>
+                            )}
+                            {member.tujuanList.length > 3 && expandedTujuanMap[member.id] && (
+                              <button
+                                type="button"
+                                onClick={() => toggleTujuan(member.id)}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-bold cursor-pointer transition-colors"
+                                title="Sembunyikan daftar kegiatan"
+                              >
+                                Tutup ▲
+                              </button>
                             )}
                           </div>
                         )}
