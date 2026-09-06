@@ -9,12 +9,14 @@ import {
   X, 
   Download, 
   Share2, 
-  Check, 
   Loader2, 
   FileText,
   MessageSquare,
   Send,
-  CheckCircle2
+  CheckCircle2,
+  ExternalLink,
+  Smartphone,
+  Info
 } from 'lucide-react';
 
 interface NotaModalProps {
@@ -37,6 +39,7 @@ export const NotaModal: React.FC<NotaModalProps> = ({
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [imageBlobJpg, setImageBlobJpg] = useState<Blob | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [showGalleryModal, setShowGalleryModal] = useState(false);
   const [waNumber, setWaNumber] = useState('082260978266');
   const [notification, setNotification] = useState<NotificationState | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -144,49 +147,53 @@ export const NotaModal: React.FC<NotaModalProps> = ({
     }
   };
 
-  // Unduh Nota 58mm Gambar (JPEG murni agar terbaca 100% di Galeri HP tanpa error)
-  const handleDownloadImage = async () => {
+  // Buka gambar di Tab Baru (Luar Iframe) agar bisa langsung sentuh tahan & simpan di HP
+  const handleOpenImageInNewTab = () => {
     try {
-      setIsGeneratingImage(true);
-
-      let blob = imageBlobJpg;
-      let dataUrl = previewImage;
-
-      if (!blob || !dataUrl) {
-        const canvas = await generateNotaCanvas(delegasi, pesertaList);
-        dataUrl = canvas.toDataURL('image/jpeg', 0.96);
-        setPreviewImage(dataUrl);
-        blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', 0.96));
-        if (blob) setImageBlobJpg(blob);
+      if (!previewImage) return;
+      const newTab = window.open('about:blank', '_blank');
+      if (newTab) {
+        newTab.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Nota 58mm MTK - ${delegasi.tujuan}</title>
+              <style>
+                body { margin: 0; padding: 16px; background: #0f172a; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+                .banner { background: #065f46; color: #ecfdf5; padding: 14px 18px; border-radius: 12px; margin-bottom: 16px; max-width: 420px; width: 100%; box-sizing: border-box; text-align: center; font-size: 14px; line-height: 1.4; box-shadow: 0 4px 12px rgba(0,0,0,0.3); border: 1px solid #10b981; }
+                .banner strong { color: #6ee7b7; font-size: 15px; }
+                img { max-width: 100%; width: 380px; height: auto; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); background: white; }
+                .btn-row { margin-top: 18px; margin-bottom: 30px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+                .btn { display: inline-block; padding: 10px 20px; background: #059669; color: white; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+                .btn:active { transform: scale(0.98); }
+              </style>
+            </head>
+            <body>
+              <div class="banner">
+                📱 <strong>Cara Simpan ke Galeri HP:</strong><br>
+                Sentuh &amp; tahan (tekan lama 1 detik) foto nota di bawah, lalu pilih <strong>"Simpan Gambar"</strong> atau <strong>"Download Gambar"</strong>.
+              </div>
+              <img src="${previewImage}" alt="Nota 58mm MTK" />
+              <div class="btn-row">
+                <a class="btn" href="${previewImage}" download="${fileBaseName}.jpg">⬇️ Unduh Berkas .JPG</a>
+              </div>
+            </body>
+          </html>
+        `);
+        newTab.document.close();
       }
+    } catch (e) {
+      console.error('Error opening image in new tab:', e);
+    }
+  };
 
+  // Unduh langsung berkas .JPG
+  const handleDirectDownloadFile = () => {
+    try {
       const fileName = `${fileBaseName}.jpg`;
-
-      // Jika di HP mendukung Web Share API file, tawarkan langsung ke galeri/aplikasi
-      if (blob && navigator.share && /android|iphone|ipad|ipod/i.test(navigator.userAgent)) {
-        try {
-          const file = new File([blob], fileName, { type: 'image/jpeg' });
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              files: [file],
-              title: `Nota 58mm Delegasi MTK`,
-              text: `Nota Pengeluaran Delegasi MTK Sidogiri - ${delegasi.tujuan}`
-            });
-            setIsGeneratingImage(false);
-            showSuccessNotification(
-              'Berhasil Menyimpan Nota!',
-              'Nota struk 58mm berhasil dibagikan / disimpan ke Galeri HP Anda.'
-            );
-            return;
-          }
-        } catch {
-          // Fallback ke direct download
-        }
-      }
-
-      // Standar download berkas
-      if (blob) {
-        const url = URL.createObjectURL(blob);
+      if (imageBlobJpg) {
+        const url = URL.createObjectURL(imageBlobJpg);
         const a = document.createElement('a');
         a.href = url;
         a.download = fileName;
@@ -198,9 +205,9 @@ export const NotaModal: React.FC<NotaModalProps> = ({
             URL.revokeObjectURL(url);
           } catch {}
         }, 15000);
-      } else if (dataUrl) {
+      } else if (previewImage) {
         const a = document.createElement('a');
-        a.href = dataUrl;
+        a.href = previewImage;
         a.download = fileName;
         document.body.appendChild(a);
         a.click();
@@ -211,61 +218,35 @@ export const NotaModal: React.FC<NotaModalProps> = ({
         }, 3000);
       }
 
-      setIsGeneratingImage(false);
       showSuccessNotification(
-        'Berhasil Mengunduh Nota!',
-        'Nota struk 58mm (.JPG) telah berhasil diunduh dan tersimpan di Galeri / folder Unduhan HP Anda.'
+        'Berkas .JPG Sedang Diunduh!',
+        'Jika tidak otomatis muncul di album Galeri, periksa folder "Download" di File Manager atau sentuh & tahan foto untuk Simpan Gambar.'
       );
     } catch (err) {
-      console.error('Error downloading nota image:', err);
-      setIsGeneratingImage(false);
-      alert('Gagal mengunduh gambar nota.');
+      console.error('Error direct download:', err);
     }
   };
 
-  // Bagikan gambar nota ke WhatsApp / Galeri via Web Share API
-  const handleShare = async () => {
+  // Bagikan via Native Share Sheet (Simpan ke Foto di iPhone, Share ke WhatsApp/Galeri di Android)
+  const handleNativeShare = async () => {
     try {
-      setIsGeneratingImage(true);
-      let blob = imageBlobJpg;
-      let dataUrl = previewImage;
-
-      if (!blob || !dataUrl) {
-        const canvas = await generateNotaCanvas(delegasi, pesertaList);
-        dataUrl = canvas.toDataURL('image/jpeg', 0.96);
-        setPreviewImage(dataUrl);
-        blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', 0.96));
-        if (blob) setImageBlobJpg(blob);
+      if (!imageBlobJpg) return;
+      const file = new File([imageBlobJpg], `${fileBaseName}.jpg`, { type: 'image/jpeg' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `Nota 58mm Delegasi MTK - ${delegasi.tujuan}`,
+          text: `Nota Pengeluaran Delegasi MTK Sidogiri - ${delegasi.tujuan}`
+        });
+        showSuccessNotification(
+          'Berhasil Membagikan!',
+          'Nota delegasi telah dibagikan.'
+        );
+      } else {
+        handleSendToWhatsApp();
       }
-
-      setIsGeneratingImage(false);
-
-      if (blob && navigator.share) {
-        const file = new File([blob], `${fileBaseName}.jpg`, { type: 'image/jpeg' });
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          try {
-            await navigator.share({
-              files: [file],
-              title: `Nota 58mm Delegasi MTK - ${delegasi.tujuan}`,
-              text: generateWhatsAppText()
-            });
-            showSuccessNotification(
-              'Berhasil Membagikan Nota!',
-              'Nota pengeluaran delegasi berhasil dibagikan.'
-            );
-            return;
-          } catch (shareErr) {
-            console.log('Share dismissed or cancelled:', shareErr);
-          }
-        }
-      }
-
-      // Fallback: Kirim rincian teks ke WhatsApp
-      handleSendToWhatsApp();
     } catch (e) {
-      console.error('Share error:', e);
-      setIsGeneratingImage(false);
-      handleSendToWhatsApp();
+      console.log('Share cancelled or not supported:', e);
     }
   };
 
@@ -318,22 +299,12 @@ export const NotaModal: React.FC<NotaModalProps> = ({
             {/* Download Image Button (Phone Gallery / File) */}
             <button
               id="btn-download-nota-image"
-              onClick={handleDownloadImage}
-              disabled={isGeneratingImage}
+              onClick={() => setShowGalleryModal(true)}
               className="px-3 py-1.5 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white"
               title="Simpan sebagai gambar Struk 58mm di Galeri HP / Komputer"
             >
-              {isGeneratingImage ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span className="hidden sm:inline">Memproses...</span>
-                </>
-              ) : (
-                <>
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Simpan ke Galeri</span>
-                </>
-              )}
+              <Download className="w-3.5 h-3.5" />
+              <span>Simpan ke Galeri</span>
             </button>
 
             {/* Download PDF 58mm Button */}
@@ -432,7 +403,7 @@ export const NotaModal: React.FC<NotaModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={handleShare}
+                onClick={handleNativeShare}
                 className="p-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg flex items-center justify-center cursor-pointer transition-colors shrink-0 shadow-xs"
                 title="Bagikan berkas nota ke WhatsApp"
               >
@@ -650,6 +621,127 @@ export const NotaModal: React.FC<NotaModalProps> = ({
           </span>
         </div>
       </div>
+
+      {/* ================================================================ */}
+      {/* POPUP KHUSUS: SIMPAN KE GALERI HP (PASTI BERHASIL & TERSIMPAN)   */}
+      {/* ================================================================ */}
+      {showGalleryModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-60 flex items-center justify-center p-3 overflow-y-auto animate-fadeIn">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 my-auto flex flex-col max-h-[95vh]">
+            
+            {/* Header Dialog */}
+            <div className="bg-[#1E293B] text-white px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="p-1 rounded-lg bg-emerald-500 text-white">
+                  <Smartphone className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="font-bold text-sm text-white leading-tight">
+                    Simpan Nota ke Galeri HP
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    Format Foto Struk 58mm (.JPG)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGalleryModal(false)}
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Isi Dialog */}
+            <div className="p-4 overflow-y-auto flex flex-col items-center gap-3 bg-slate-50">
+              
+              {/* Petunjuk Praktis & Pasti Masuk Galeri */}
+              <div className="w-full bg-emerald-50 border-2 border-emerald-500/80 rounded-2xl p-3 text-emerald-950 space-y-1.5 shadow-xs">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse shrink-0" />
+                  <p className="font-extrabold text-xs text-emerald-900 uppercase tracking-wide">
+                    Cara Pasti Masuk ke Galeri HP:
+                  </p>
+                </div>
+                <p className="text-xs text-emerald-900 leading-snug">
+                  👉 <strong>Sentuh &amp; tahan (tekan lama 1 detik)</strong> foto nota di bawah, lalu pilih menu <strong>"Simpan Gambar"</strong> atau <strong>"Download Gambar"</strong>.
+                </p>
+                <p className="text-[11px] text-emerald-700 leading-tight">
+                  Foto akan langsung 100% tersimpan rapi di album Galeri HP Anda!
+                </p>
+              </div>
+
+              {/* Tampilan Foto Nota Siap Simpan */}
+              <div className="w-full flex justify-center p-2.5 bg-white rounded-2xl border border-slate-300 shadow-xs">
+                {previewImage ? (
+                  <div className="flex flex-col items-center">
+                    <img 
+                      src={previewImage} 
+                      alt="Nota 58mm MTK" 
+                      className="w-full max-w-[280px] sm:max-w-[320px] h-auto rounded-lg shadow-md border border-slate-200 cursor-pointer active:scale-95 transition-transform"
+                      title="Tekan lama foto untuk Simpan ke Galeri"
+                    />
+                    <p className="text-[10px] text-slate-500 font-medium mt-1.5 text-center">
+                      👆 Tekan lama foto di atas untuk Simpan ke Galeri
+                    </p>
+                  </div>
+                ) : (
+                  <div className="py-12 flex flex-col items-center gap-2 text-slate-400">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span className="text-xs">Menyiapkan foto nota...</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Tombol-tombol Opsi Cadangan */}
+              <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                {/* Buka di Tab Baru (Luar Iframe) */}
+                <button
+                  type="button"
+                  onClick={handleOpenImageInNewTab}
+                  className="w-full py-2.5 px-3 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                >
+                  <ExternalLink className="w-4 h-4 text-emerald-400" />
+                  <span>Buka di Tab Baru</span>
+                </button>
+
+                {/* Unduh Otomatis File .JPG */}
+                <button
+                  type="button"
+                  onClick={handleDirectDownloadFile}
+                  className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Unduh File (.JPG)</span>
+                </button>
+              </div>
+
+              {/* Catatan Tambahan */}
+              <div className="w-full flex items-start gap-1.5 text-[10px] text-slate-500 pt-1 px-1">
+                <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                <p className="leading-snug">
+                  Jika tombol unduh berkas tersimpan di folder "Unduhan/Download" HP, Anda dapat memindahkannya ke Galeri atau cukup gunakan cara <strong>tekan lama foto</strong> di atas.
+                </p>
+              </div>
+
+            </div>
+
+            {/* Footer Dialog */}
+            <div className="p-3 bg-white border-t border-slate-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowGalleryModal(false)}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl cursor-pointer transition-colors"
+              >
+                Tutup
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
