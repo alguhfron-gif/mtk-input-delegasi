@@ -175,7 +175,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold text-xs text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-all cursor-pointer whitespace-nowrap"
             >
               <TrendingUp className="w-3.5 h-3.5 text-emerald-700" />
-              <span>Analitik Keuangan</span>
+              <span>Presentase Kegiatan</span>
             </button>
 
             <button

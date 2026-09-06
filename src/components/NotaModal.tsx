@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Delegasi, Peserta } from '../types';
 import { formatRupiah, formatTanggalMasehi, formatTanggalHijri } from '../utils/format';
 import { exportNotaPDF, triggerFileDownload, downloadDataUrl } from '../utils/exportUtils';
+import { generateNotaCanvas } from '../utils/notaCanvas';
 import { LogoMTK } from './LogoMTK';
 import { 
   Printer, 
@@ -10,12 +11,10 @@ import {
   Share2, 
   Check, 
   Loader2, 
-  Image as ImageIcon,
   FileText,
   Smartphone,
-  Eye
+  Image as ImageIcon
 } from 'lucide-react';
-import html2canvas from 'html2canvas';
 
 interface NotaModalProps {
   delegasi: Delegasi | null;
@@ -32,6 +31,7 @@ export const NotaModal: React.FC<NotaModalProps> = ({
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [imageBlob, setImageBlob] = useState<Blob | null>(null);
 
   if (!delegasi) return null;
 
@@ -68,34 +68,26 @@ export const NotaModal: React.FC<NotaModalProps> = ({
     }
   };
 
+  // Helper to trigger image download using the Blob
+  const triggerImageFileDownload = (blob: Blob) => {
+    triggerFileDownload(blob, fileName);
+  };
+
   // Download Nota as PNG image for Phone Gallery / Downloads
   const handleDownloadImage = async () => {
-    const notaElement = document.getElementById('printable-nota');
-    if (!notaElement) return;
-
     try {
       setIsGeneratingImage(true);
 
-      // Render the element to high-res canvas (scale 3 for crisp text on mobile)
-      const canvas = await html2canvas(notaElement, {
-        scale: 3,
-        backgroundColor: '#ffffff',
-        useCORS: true,
-        logging: false,
-        scrollY: 0,
-        scrollX: 0
-      });
-
+      // Generate ultra-crisp Canvas directly via HTML5 2D Canvas API (Zero CSS oklch bugs, 100% reliable)
+      const canvas = await generateNotaCanvas(delegasi, pesertaList);
       const dataUrl = canvas.toDataURL('image/png');
       setPreviewImage(dataUrl);
 
-      // 1. Direct download trigger using Data URL (standard for Chrome, Android & iOS WebKit)
-      downloadDataUrl(dataUrl, fileName);
-
-      // 2. Also convert to Blob for native file download retention
+      // Convert to Blob for direct mobile file download & gallery saving
       canvas.toBlob((blob) => {
         if (blob) {
-          triggerFileDownload(blob, fileName);
+          setImageBlob(blob);
+          triggerImageFileDownload(blob);
         }
       }, 'image/png');
 
@@ -105,35 +97,45 @@ export const NotaModal: React.FC<NotaModalProps> = ({
 
     } catch (err) {
       console.error('Error generating nota image:', err);
-      alert('Gagal membuat gambar nota. Mengalihkan ke unduhan PDF...');
       setIsGeneratingImage(false);
-      handleDownloadPDF();
+      alert('Terjadi kendala saat memproses gambar nota. Silakan coba kembali.');
     }
   };
 
   // Share via Web Share API
   const handleShare = async () => {
-    if (!previewImage) {
-      await handleDownloadImage();
-    }
     try {
-      const notaElement = document.getElementById('printable-nota');
-      if (!notaElement) return;
-      const canvas = await html2canvas(notaElement, { scale: 2.5, backgroundColor: '#ffffff' });
+      setIsGeneratingImage(true);
+      const canvas = await generateNotaCanvas(delegasi, pesertaList);
+      const dataUrl = canvas.toDataURL('image/png');
+      setPreviewImage(dataUrl);
+
       canvas.toBlob(async (blob) => {
-        if (blob && navigator.share) {
-          const file = new File([blob], fileName, { type: 'image/png' });
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              files: [file],
-              title: 'Nota Delegasi MTK',
-              text: `Nota Delegasi MTK: ${delegasi.tujuan}`
-            });
+        setIsGeneratingImage(false);
+        if (blob) {
+          setImageBlob(blob);
+          if (navigator.share) {
+            const file = new File([blob], fileName, { type: 'image/png' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+              try {
+                await navigator.share({
+                  files: [file],
+                  title: 'Nota Pengeluaran Delegasi MTK',
+                  text: `Nota Delegasi MTK: ${delegasi.tujuan}`
+                });
+                return;
+              } catch (shareErr) {
+                console.log('Share dismissed or cancelled:', shareErr);
+              }
+            }
           }
+          // If Web Share is not supported or cancelled, fallback to file download
+          triggerImageFileDownload(blob);
         }
       }, 'image/png');
     } catch (e) {
-      console.log('Share dismissed or not supported', e);
+      console.error('Share error:', e);
+      setIsGeneratingImage(false);
     }
   };
 
@@ -242,7 +244,13 @@ export const NotaModal: React.FC<NotaModalProps> = ({
                   src={previewImage} 
                   alt={`Nota ${delegasi.tujuan}`}
                   className="w-full h-auto object-contain rounded-lg border border-slate-100 max-h-[50vh] cursor-pointer"
-                  onClick={() => downloadDataUrl(previewImage, fileName)}
+                  onClick={() => {
+                    if (imageBlob) {
+                      triggerImageFileDownload(imageBlob);
+                    } else {
+                      downloadDataUrl(previewImage, fileName);
+                    }
+                  }}
                   title="Sentuh atau klik untuk mengunduh gambar"
                 />
               </div>
@@ -254,14 +262,20 @@ export const NotaModal: React.FC<NotaModalProps> = ({
                   <span>Cara Simpan ke Galeri Foto HP:</span>
                 </p>
                 <p className="text-[11px] text-slate-600 leading-relaxed">
-                  Sentuh dan tahan (tekan lama) pada gambar nota di atas selama 1 detik, lalu pilih menu <strong>"Simpan Gambar"</strong> atau <strong>"Download Gambar"</strong>. Gambar akan langsung tersimpan di album foto HP Anda.
+                  Sentuh dan tahan (tekan lama / long-press) pada gambar nota di atas selama 1 detik, lalu pilih menu <strong>"Simpan Gambar"</strong> atau <strong>"Download Gambar"</strong>. Gambar akan langsung tersimpan di album foto / galeri HP Anda.
                 </p>
               </div>
 
               {/* Action Buttons for Image */}
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <button
-                  onClick={() => downloadDataUrl(previewImage, fileName)}
+                  onClick={() => {
+                    if (imageBlob) {
+                      triggerImageFileDownload(imageBlob);
+                    } else {
+                      downloadDataUrl(previewImage, fileName);
+                    }
+                  }}
                   className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
                 >
                   <Download className="w-4 h-4" />
@@ -274,7 +288,7 @@ export const NotaModal: React.FC<NotaModalProps> = ({
                   title="Bagikan melalui WhatsApp atau simpan"
                 >
                   <Share2 className="w-4 h-4" />
-                  <span>Bagikan</span>
+                  <span>Bagikan ke Galeri / WhatsApp</span>
                 </button>
               </div>
             </div>

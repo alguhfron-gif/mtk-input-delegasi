@@ -57,7 +57,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
     { id: 'dashboard', label: 'Home', icon: <LayoutDashboard className="w-4.5 h-4.5" /> },
     { id: 'inputDelegasi', label: 'Input', icon: <FileText className="w-4.5 h-4.5" /> },
     { id: 'riwayat', label: 'Riwayat', icon: <BarChart3 className="w-4.5 h-4.5" /> },
-    { id: 'analitik', label: 'Analitik', icon: <TrendingUp className="w-4.5 h-4.5" /> },
+    { id: 'analitik', label: 'Presentase', icon: <TrendingUp className="w-4.5 h-4.5" /> },
   ];
 
   return (

@@ -39,6 +39,7 @@ import {
   ArrowUpDown,
   Sparkles
 } from 'lucide-react';
+import { AnalitikKeikutsertaan } from './AnalitikKeikutsertaan';
 
 interface AnalitikKeuanganProps {
   delegasiList: Delegasi[];
@@ -136,7 +137,8 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
       uangTerpakai: 0,
       uangDibawa: 0,
       totalKegiatan: 0,
-      hijriMonthNum: hm.monthNum
+      hijriMonthNum: hm.monthNum,
+      pesertaListMonth: [] as { id: string; nama: string; count: number }[]
     }));
 
     filteredDelegasi.forEach(d => {
@@ -148,12 +150,33 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
             targetMonth.uangTerpakai += (d.uangTerpakai || 0);
             targetMonth.uangDibawa += (d.uangDibawa || 0);
             targetMonth.totalKegiatan += 1;
+
+            if (Array.isArray(d.peserta)) {
+              d.peserta.forEach(pid => {
+                if (!pid) return;
+                const p = pesertaList.find(x => x.id === pid || x.nama.toLowerCase() === pid.toLowerCase());
+                const pId = p ? p.id : pid;
+                const pNama = p ? p.nama : pid;
+                const existing = targetMonth.pesertaListMonth.find(x => x.id === pId || x.nama.toLowerCase() === pNama.toLowerCase());
+                if (existing) {
+                  existing.count += 1;
+                } else {
+                  targetMonth.pesertaListMonth.push({ id: pId, nama: pNama, count: 1 });
+                }
+              });
+            }
           }
         }
       }
     });
+
+    // Urutkan peserta dalam bulan: paling sering keluar di bulan tsb ke paling sedikit
+    months.forEach(m => {
+      m.pesertaListMonth.sort((a, b) => b.count - a.count);
+    });
+
     return months;
-  }, [filteredDelegasi]);
+  }, [filteredDelegasi, pesertaList]);
 
   // Statistik Kegiatan Bulanan (Bulan Terbanyak vs Tersedikit)
   const monthlyStats = useMemo(() => {
@@ -361,13 +384,13 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
             </span>
             <div>
               <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
-                <span>Analitik Keuangan Delegasi</span>
+                <span>Presentase Kegiatan</span>
                 <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full border border-emerald-200/60 font-mono">
                   Firebase Sync
                 </span>
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Monitoring visual intensitas kegiatan bulanan, pengeluaran, dan alokasi anggaran berbasis Kalender Hijriah Pesantren.
+                Monitoring visual intensitas dan presentase kegiatan bulanan, keikutsertaan delegasi, serta alokasi anggaran berbasis Kalender Hijriah.
               </p>
             </div>
           </div>
@@ -829,6 +852,7 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
               <tr className="bg-slate-50 border-b border-slate-200/70 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
                 <th className="py-2.5 px-3">Bulan Hijriah</th>
                 <th className="py-2.5 px-3 text-center">Jml Kegiatan</th>
+                <th className="py-2.5 px-3 text-left min-w-[200px]">Delegasi yang Bertugas (Sering → Jarang)</th>
                 <th className="py-2.5 px-3 text-right">Pengeluaran</th>
                 <th className="py-2.5 px-3 text-right">Uang Dibawa</th>
                 <th className="py-2.5 px-3 text-right">Sisa Kembali</th>
@@ -877,6 +901,38 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
                       </div>
                     </td>
 
+                    {/* Kolom Nama Delegasi yang Bertugas di Bulan Ini */}
+                    <td className="py-2 px-3 text-left">
+                      {m.pesertaListMonth.length === 0 ? (
+                        <span className="text-slate-400 italic text-[11px]">-</span>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-1 max-w-sm">
+                          {m.pesertaListMonth.slice(0, 3).map((p) => (
+                            <span
+                              key={p.id}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-medium border border-slate-200"
+                              title={`${p.nama}: ${p.count}x tugas di bulan ${m.bulanFull}`}
+                            >
+                              <span className="truncate max-w-[110px]">{p.nama}</span>
+                              {p.count > 1 && (
+                                <span className="font-bold text-teal-800 bg-teal-50 px-1 rounded-sm text-[9px] border border-teal-200/60 font-mono">
+                                  {p.count}x
+                                </span>
+                              )}
+                            </span>
+                          ))}
+                          {m.pesertaListMonth.length > 3 && (
+                            <span
+                              className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200 text-[10px] font-bold"
+                              title={m.pesertaListMonth.slice(3).map(p => `${p.nama} (${p.count}x)`).join(', ')}
+                            >
+                              +{m.pesertaListMonth.length - 3} lainnya
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+
                     <td className="py-2 px-3 text-right font-mono font-bold text-slate-800 whitespace-nowrap">
                       {m.uangTerpakai > 0 ? formatRupiah(m.uangTerpakai) : '-'}
                     </td>
@@ -919,6 +975,14 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
           </table>
         </div>
       </div>
+
+      {/* TABEL ANALITIK KEIKUTSERTAAN DELEGASI (SIAPA SERING KELUAR S.D. BELUM PERNAH KELUAR) */}
+      <AnalitikKeikutsertaan
+        pesertaList={pesertaList}
+        delegasiList={filteredDelegasi}
+        totalAllKegiatan={filteredDelegasi.length}
+        selectedYear={selectedYear}
+      />
 
       {/* Secondary Row: Breakdown Table & Top Destinations */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -35,7 +35,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'peserta', label: 'Database Peserta', icon: <Users className="w-4.5 h-4.5" /> },
     { id: 'inputDelegasi', label: 'Input Delegasi', icon: <FileText className="w-4.5 h-4.5" /> },
     { id: 'riwayat', label: 'Riwayat & Laporan', icon: <BarChart3 className="w-4.5 h-4.5" /> },
-    { id: 'analitik', label: 'Analitik Keuangan', icon: <TrendingUp className="w-4.5 h-4.5" /> },
+    { id: 'analitik', label: 'Presentase Kegiatan', icon: <TrendingUp className="w-4.5 h-4.5" /> },
     { id: 'anggaran', label: 'Anggaran Tahunan', icon: <Wallet className="w-4.5 h-4.5" /> },
     { id: 'backup', label: 'Backup & Pulihkan', icon: <Database className="w-4.5 h-4.5" /> },
   ];
