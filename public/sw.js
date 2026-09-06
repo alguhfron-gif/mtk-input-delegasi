@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mtk-delegasi-v3';
+const CACHE_NAME = 'mtk-delegasi-v5-auto';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -10,9 +10,10 @@ const STATIC_ASSETS = [
 ];
 
 // ==========================================
-// 1. LIFECYCLE (INSTALL & ACTIVATE)
+// 1. LIFECYCLE (INSTALL & ACTIVATE - AUTO UPDATE)
 // ==========================================
 self.addEventListener('install', (event) => {
+  // Langsung aktifkan service worker baru tanpa menunggu tab/app lama ditutup
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -25,23 +26,64 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
-      )
-    ).then(() => self.clients.claim())
+    caches.keys().then((keys) => {
+      // Hapus seluruh cache versi lama agar HP langsung menggunakan kode & aset terbaru
+      return Promise.all(
+        keys.filter((k) => k !== CACHE_NAME).map((k) => {
+          console.log('[SW Auto-Update] Menghapus cache versi lama:', k);
+          return caches.delete(k);
+        })
+      );
+    }).then(() => {
+      // Segera klaim seluruh klien/halaman yang sedang terbuka
+      return self.clients.claim();
+    }).then(() => {
+      // Beritahukan ke semua halaman/HP bahwa versi baru sudah aktif
+      return self.clients.matchAll().then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({
+            type: 'SW_VERSION_ACTIVATED',
+            cacheName: CACHE_NAME,
+            timestamp: Date.now()
+          });
+        });
+      });
+    })
   );
 });
 
 // ==========================================
-// 2. NETWORK & CACHE STRATEGY (FETCH)
+// 2. PESAN KONTROL DARI APLIKASI (MANUAL/AUTO)
+// ==========================================
+self.addEventListener('message', (event) => {
+  if (!event.data) return;
+
+  if (event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+
+  if (event.data.type === 'CLEAR_CACHE_AND_RELOAD') {
+    caches.keys().then((keys) => {
+      return Promise.all(keys.map((k) => caches.delete(k)));
+    }).then(() => {
+      self.clients.matchAll().then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({ type: 'CACHE_CLEARED_SUCCESS' });
+        });
+      });
+    });
+  }
+});
+
+// ==========================================
+// 3. NETWORK & CACHE STRATEGY (NETWORK-FIRST FOR UPDATES)
 // ==========================================
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
 
-  // Jangan cache API pihak ketiga (Firebase / Firestore / Google APIs)
+  // Jangan pernah cache permintaan Firebase / Firestore / Google APIs
   if (
     !event.request.url.startsWith(self.location.origin) ||
     url.hostname.includes('firebaseio.com') ||
@@ -52,7 +94,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Handle SPA Navigation requests
+  // 1. Navigation Request (index.html / rute halaman):
+  // Wajib Network-First agar selalu mendapat versi HTML dan chunk JS terbaru dari server
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
@@ -64,10 +107,11 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(async () => {
+          // Hanya jika benar-benar offline tanpa internet, gunakan cache
           const cached = await caches.match(event.request);
           if (cached) return cached;
           const fallback = await caches.match('/index.html');
-          return fallback || new Response('Aplikasi sedang offline', {
+          return fallback || new Response('Aplikasi MTK sedang berjalan secara offline', {
             headers: { 'Content-Type': 'text/html' }
           });
         })
@@ -75,7 +119,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Handle Static Assets (JS, CSS, Images, Fonts)
+  // 2. Aset Statis (JS, CSS, Gambar, Ikon, dsb):
+  // Stale-While-Revalidate dengan prioritas pembaruan di latar belakang
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request)
@@ -88,13 +133,14 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() => cachedResponse);
 
+      // Jika ada di cache kembalikan secepatnya, tapi jaringan tetap memperbarui cache
       return cachedResponse || fetchPromise;
     })
   );
 });
 
 // ==========================================
-// 3. BACKGROUND SYNC (Kirim Data saat Online)
+// 4. BACKGROUND SYNC (Kirim Data saat Online)
 // ==========================================
 self.addEventListener('sync', (event) => {
   if (event.tag === 'sync-delegasi-data') {
@@ -104,7 +150,6 @@ self.addEventListener('sync', (event) => {
 
 async function syncPendingDelegasiData() {
   try {
-    console.log('[SW] Melakukan sinkronisasi data delegasi di background...');
     const allClients = await self.clients.matchAll();
     for (const client of allClients) {
       client.postMessage({
@@ -118,7 +163,7 @@ async function syncPendingDelegasiData() {
 }
 
 // ==========================================
-// 4. PERIODIC BACKGROUND SYNC (Pembaruan Berkala)
+// 5. PERIODIC BACKGROUND SYNC (Pembaruan Berkala)
 // ==========================================
 self.addEventListener('periodicsync', (event) => {
   if (event.tag === 'update-delegasi-cache') {
@@ -128,7 +173,6 @@ self.addEventListener('periodicsync', (event) => {
 
 async function fetchLatestDelegasiUpdates() {
   try {
-    console.log('[SW] Mengambil pembaruan data delegasi berkala...');
     const allClients = await self.clients.matchAll();
     for (const client of allClients) {
       client.postMessage({
@@ -142,7 +186,7 @@ async function fetchLatestDelegasiUpdates() {
 }
 
 // ==========================================
-// 5. PUSH NOTIFICATIONS
+// 6. PUSH NOTIFICATIONS
 // ==========================================
 self.addEventListener('push', (event) => {
   let notificationData = {

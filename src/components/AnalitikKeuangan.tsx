@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Delegasi, Peserta, PageView } from '../types';
-import { formatRupiah } from '../utils/format';
+import { formatRupiah, getHijriInfo } from '../utils/format';
 import {
   ResponsiveContainer,
   BarChart,
@@ -14,7 +14,9 @@ import {
   Cell,
   CartesianGrid,
   AreaChart,
-  Area
+  Area,
+  ComposedChart,
+  Line
 } from 'recharts';
 import {
   TrendingUp,
@@ -29,7 +31,13 @@ import {
   MapPin,
   Filter,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Trophy,
+  Activity,
+  Flame,
+  TrendingDown,
+  ArrowUpDown,
+  Sparkles
 } from 'lucide-react';
 
 interface AnalitikKeuanganProps {
@@ -52,14 +60,20 @@ const PALETTE_COLORS = [
   '#0891b2', // Cyan 600
 ];
 
-const NAMA_BULAN = [
-  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-];
-
-const NAMA_BULAN_PENDEK = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-  'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
+// Siklus kalender ajaran pesantren: Syawal (paling bawah/awal siklus) hingga Ramadhan (puncak/akhir siklus)
+const HIJRI_ACADEMIC_MONTHS = [
+  { monthNum: 10, short: 'Syaw', full: 'Syawal' },
+  { monthNum: 11, short: 'Dz.Q', full: "Dzul Qa'dah" },
+  { monthNum: 12, short: 'Dz.H', full: "Dzul Hijjah" },
+  { monthNum: 1, short: 'Muh', full: 'Muharram' },
+  { monthNum: 2, short: 'Shaf', full: 'Shafar' },
+  { monthNum: 3, short: 'Rab.A', full: 'Rabiul Awal' },
+  { monthNum: 4, short: 'Rab.T', full: 'Rabiul Tsani' },
+  { monthNum: 5, short: 'Jum.U', full: 'Jumadal Ula' },
+  { monthNum: 6, short: 'Jum.T', full: 'Jumadas Tsani' },
+  { monthNum: 7, short: 'Raj', full: 'Rajab' },
+  { monthNum: 8, short: "Sya'b", full: "Sya'ban" },
+  { monthNum: 9, short: 'Ram', full: 'Ramadhan' }
 ];
 
 export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
@@ -68,16 +82,18 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
   saldoAnggaran,
   onNavigate
 }) => {
-  // Available Years Filter
+  // Available Hijri Years Filter
   const availableYears = useMemo(() => {
     const yearsSet = new Set<string>();
-    const currentYear = new Date().getFullYear().toString();
-    yearsSet.add(currentYear);
+    const currentHijri = (getHijriInfo(new Date())?.year || 1446).toString();
+    yearsSet.add(currentHijri);
 
     delegasiList.forEach(d => {
       if (d.tglBerangkat) {
-        const y = new Date(d.tglBerangkat).getFullYear();
-        if (!isNaN(y)) yearsSet.add(y.toString());
+        const hInfo = getHijriInfo(d.tglBerangkat);
+        if (hInfo) {
+          yearsSet.add(hInfo.year.toString());
+        }
       }
     });
 
@@ -85,15 +101,16 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
   }, [delegasiList]);
 
   const [selectedYear, setSelectedYear] = useState<string>('all');
-  const [activeChartType, setActiveChartType] = useState<'bar' | 'area'>('bar');
+  const [chartMetric, setChartMetric] = useState<'both' | 'kegiatan' | 'nominal'>('both');
+  const [tableSortBy, setTableSortBy] = useState<'calendar' | 'kegiatan-desc' | 'nominal-desc'>('calendar');
 
-  // Filtered delegasi based on selected year
+  // Filtered delegasi based on selected Hijri year
   const filteredDelegasi = useMemo(() => {
     if (selectedYear === 'all') return delegasiList;
     return delegasiList.filter(d => {
       if (!d.tglBerangkat) return false;
-      const y = new Date(d.tglBerangkat).getFullYear().toString();
-      return y === selectedYear;
+      const hInfo = getHijriInfo(d.tglBerangkat);
+      return hInfo && hInfo.year.toString() === selectedYear;
     });
   }, [delegasiList, selectedYear]);
 
@@ -110,34 +127,74 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
   const persentasePlafon = saldoAnggaran > 0 ? ((totalPengeluaran / saldoAnggaran) * 100) : 0;
   const sisaPlafon = Math.max(0, saldoAnggaran - totalPengeluaran);
 
-  // 1. Data Pengeluaran Bulanan (Monthly Expenses for Bar/Area Chart)
+  // 1. Data Pengeluaran & Jumlah Kegiatan Bulanan (100% Kalender Hijriah Pesantren: Syawal s.d. Ramadhan)
   const monthlyData = useMemo(() => {
-    // 12 months array
-    const months = Array.from({ length: 12 }, (_, i) => ({
-      bulanIndex: i,
-      bulan: NAMA_BULAN_PENDEK[i],
-      bulanFull: NAMA_BULAN[i],
+    const months = HIJRI_ACADEMIC_MONTHS.map((hm, idx) => ({
+      bulanIndex: idx,
+      bulan: hm.short,
+      bulanFull: hm.full,
       uangTerpakai: 0,
       uangDibawa: 0,
-      totalKegiatan: 0
+      totalKegiatan: 0,
+      hijriMonthNum: hm.monthNum
     }));
 
     filteredDelegasi.forEach(d => {
       if (d.tglBerangkat) {
-        const date = new Date(d.tglBerangkat);
-        if (!isNaN(date.getTime())) {
-          const m = date.getMonth();
-          if (m >= 0 && m < 12) {
-            months[m].uangTerpakai += (d.uangTerpakai || 0);
-            months[m].uangDibawa += (d.uangDibawa || 0);
-            months[m].totalKegiatan += 1;
+        const hInfo = getHijriInfo(d.tglBerangkat);
+        if (hInfo) {
+          const targetMonth = months.find(m => m.hijriMonthNum === hInfo.month);
+          if (targetMonth) {
+            targetMonth.uangTerpakai += (d.uangTerpakai || 0);
+            targetMonth.uangDibawa += (d.uangDibawa || 0);
+            targetMonth.totalKegiatan += 1;
           }
         }
       }
     });
-
     return months;
   }, [filteredDelegasi]);
+
+  // Statistik Kegiatan Bulanan (Bulan Terbanyak vs Tersedikit)
+  const monthlyStats = useMemo(() => {
+    const withActivities = monthlyData.filter(m => m.totalKegiatan > 0);
+    const monthsWithZero = monthlyData.filter(m => m.totalKegiatan === 0);
+
+    if (withActivities.length === 0) {
+      return {
+        bulanTerbanyak: null,
+        bulanTersedikit: null,
+        maxKegiatan: 0,
+        minKegiatan: 0,
+        totalKegiatan: 0,
+        rataRataPerBulan: '0',
+        monthsWithZeroCount: 12
+      };
+    }
+
+    // Sort descending by total kegiatan
+    const sortedDesc = [...withActivities].sort((a, b) => b.totalKegiatan - a.totalKegiatan);
+    const maxKegiatan = sortedDesc[0].totalKegiatan;
+    const bulanTerbanyak = sortedDesc[0];
+
+    // Bulan paling sedikit kegiatan
+    // Jika ada bulan yang nol, kita catat bulan beraktivitas paling sedikit dan info bulan nol
+    const sortedAsc = [...withActivities].sort((a, b) => a.totalKegiatan - b.totalKegiatan);
+    const minKegiatan = sortedAsc[0].totalKegiatan;
+    const bulanTersedikit = sortedAsc[0];
+
+    const totalKegiatan = withActivities.reduce((sum, m) => sum + m.totalKegiatan, 0);
+
+    return {
+      bulanTerbanyak,
+      bulanTersedikit,
+      maxKegiatan,
+      minKegiatan,
+      totalKegiatan,
+      rataRataPerBulan: (totalKegiatan / 12).toFixed(1),
+      monthsWithZeroCount: monthsWithZero.length
+    };
+  }, [monthlyData]);
 
   // 2. Data Pengeluaran Berdasarkan Kategori Rincian (Category Aggregation for Pie & Horizontal Bar)
   const categoryData = useMemo(() => {
@@ -147,7 +204,6 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
       if (d.rincian && d.rincian.length > 0) {
         d.rincian.forEach(r => {
           const rawName = r.nama.trim() || 'Lain-lain';
-          // Standardize category name (Capitalized)
           const catName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
           if (!categoryMap[catName]) {
             categoryMap[catName] = { nominal: 0, count: 0 };
@@ -156,7 +212,6 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
           categoryMap[catName].count += 1;
         });
       } else if (d.uangTerpakai > 0) {
-        // Fallback for delegasi without detailed rincian items
         const catName = 'Operasional Umum';
         if (!categoryMap[catName]) {
           categoryMap[catName] = { nominal: 0, count: 0 };
@@ -177,7 +232,6 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
       };
     });
 
-    // Sort descending by nominal
     return list.sort((a, b) => b.value - a.value);
   }, [filteredDelegasi, totalPengeluaran]);
 
@@ -201,32 +255,70 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
         count: destMap[name].count
       }))
       .sort((a, b) => b.total - a.total)
-      .slice(0, 6); // Top 6
+      .slice(0, 6);
   }, [filteredDelegasi]);
+
+  // Sorted monthly table data
+  const tableMonthlyData = useMemo(() => {
+    const list = [...monthlyData];
+    if (tableSortBy === 'kegiatan-desc') {
+      return list.sort((a, b) => b.totalKegiatan - a.totalKegiatan);
+    }
+    if (tableSortBy === 'nominal-desc') {
+      return list.sort((a, b) => b.uangTerpakai - a.uangTerpakai);
+    }
+    return list; // default calendar order
+  }, [monthlyData, tableSortBy]);
 
   // Top category highlight
   const topCategory = categoryData[0] || null;
 
-  // Custom Currency Tooltip for Bar & Area Chart
+  // Custom Currency & Activities Tooltip for Bar & Composed Chart
   const CustomBarTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
+      const mItem = monthlyData.find(m => m.bulan === label);
+      const totalKeg = mItem ? mItem.totalKegiatan : 0;
+      const uangTerpakai = mItem ? mItem.uangTerpakai : 0;
+      const uangDibawa = mItem ? mItem.uangDibawa : 0;
+      const sisaKembali = Math.max(0, uangDibawa - uangTerpakai);
+      const rataRata = totalKeg > 0 ? Math.round(uangTerpakai / totalKeg) : 0;
+
       return (
-        <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl border border-slate-700 text-xs space-y-1.5 min-w-[170px]">
-          <p className="font-bold text-slate-200 border-b border-slate-700 pb-1 flex items-center gap-1.5">
-            <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Bulan {label}</span>
-          </p>
-          {payload.map((entry: any, index: number) => (
-            <div key={`item-${index}`} className="flex items-center justify-between gap-3 text-[11px]">
-              <span className="flex items-center gap-1.5 text-slate-300">
-                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                <span>{entry.name}:</span>
-              </span>
-              <span className="font-mono font-bold text-white">
-                {formatRupiah(entry.value)}
-              </span>
+        <div className="bg-slate-900/95 text-white p-3.5 rounded-xl shadow-2xl border border-slate-700 text-xs space-y-2 min-w-[210px] backdrop-blur-md">
+          <div className="flex items-center justify-between border-b border-slate-700 pb-1.5">
+            <span className="font-bold text-slate-200 flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Bulan {mItem ? mItem.bulanFull : label}</span>
+            </span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+              {totalKeg} Kegiatan
+            </span>
+          </div>
+
+          <div className="space-y-1.5 text-[11px]">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Total Kegiatan:</span>
+              <span className="font-bold font-mono text-teal-300">{totalKeg} Kegiatan</span>
             </div>
-          ))}
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Uang Terpakai:</span>
+              <span className="font-bold font-mono text-emerald-400">{formatRupiah(uangTerpakai)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Uang Dibawa:</span>
+              <span className="font-bold font-mono text-sky-400">{formatRupiah(uangDibawa)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Sisa Kembali:</span>
+              <span className="font-mono text-slate-300">{formatRupiah(sisaKembali)}</span>
+            </div>
+            {totalKeg > 0 && (
+              <div className="flex items-center justify-between pt-1 border-t border-slate-800 text-[10px] text-slate-400">
+                <span>Rata-rata / kegiatan:</span>
+                <span className="font-mono text-slate-200">{formatRupiah(rataRata)}</span>
+              </div>
+            )}
+          </div>
         </div>
       );
     }
@@ -258,34 +350,35 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
   };
 
   return (
-    <div id="page-analitik-keuangan" className="space-y-6 animate-fadeIn pb-12">
+    <div id="page-analitik-keuangan" className="space-y-4 animate-fadeIn pb-12">
       
       {/* Header Page */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs">
         <div>
           <div className="flex items-center gap-2.5">
-            <span className="p-2.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100">
-              <TrendingUp className="w-5 h-5" />
+            <span className="p-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100">
+              <TrendingUp className="w-4.5 h-4.5" />
             </span>
             <div>
-              <h2 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+              <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
                 <span>Analitik Keuangan Delegasi</span>
                 <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full border border-emerald-200/60 font-mono">
                   Firebase Sync
                 </span>
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Monitoring visual pengeluaran bulanan dan alokasi anggaran delegasi secara real-time.
+                Monitoring visual intensitas kegiatan bulanan, pengeluaran, dan alokasi anggaran berbasis Kalender Hijriah Pesantren.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Filter Controls */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        {/* Filter Controls: Tahun Hijriah & Indikator Kalender */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Filter Tahun Hijriah */}
           <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">
             <Filter className="w-3.5 h-3.5 text-slate-500" />
-            <span>Filter Tahun:</span>
+            <span>Tahun Hijriah:</span>
             <select
               id="select-filter-tahun"
               value={selectedYear}
@@ -294,115 +387,124 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
             >
               <option value="all">Semua Tahun</option>
               {availableYears.map(y => (
-                <option key={y} value={y}>{y}</option>
+                <option key={y} value={y}>{y} H</option>
               ))}
             </select>
           </div>
 
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold">
-            <button
-              onClick={() => setActiveChartType('bar')}
-              className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
-                activeChartType === 'bar'
-                  ? 'bg-white text-emerald-700 shadow-xs font-bold'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <BarChart3 className="w-3.5 h-3.5" />
-              <span>Batang</span>
-            </button>
-            <button
-              onClick={() => setActiveChartType('area')}
-              className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
-                activeChartType === 'area'
-                  ? 'bg-white text-emerald-700 shadow-xs font-bold'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <TrendingUp className="w-3.5 h-3.5" />
-              <span>Area</span>
-            </button>
+          {/* Badge Kalender Hijriah Pesantren */}
+          <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-xl border border-emerald-200/80 text-xs font-bold shadow-2xs">
+            <span>🌙 Siklus Pesantren: Syawal – Ramadhan</span>
           </div>
         </div>
       </div>
 
-      {/* KPI Cards Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Pengeluaran */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-slate-500">Total Pengeluaran</span>
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center">
-              <Receipt className="w-4.5 h-4.5" />
+      {/* 6 KPI METRIK UTAMA (UKURAN DIPERKECIL, RINGKAS & HEMAT TEMPAT) */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5">
+        {/* 1. Bulan Paling Banyak Kegiatan (Teal / Hijau Zamrud - Tanpa Oranye) */}
+        <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-teal-200/80 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <span className="text-[11px] font-bold text-teal-900 truncate">Bulan Terbanyak</span>
+            <div className="w-5 h-5 rounded-md bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
+              <Trophy className="w-3 h-3 text-teal-600" />
             </div>
           </div>
-          <div className="text-xl font-bold text-slate-800 truncate" title={formatRupiah(totalPengeluaran)}>
+          <div className="text-sm sm:text-base font-black text-slate-800 truncate" title={monthlyStats.bulanTerbanyak ? monthlyStats.bulanTerbanyak.bulanFull : 'Belum Ada'}>
+            {monthlyStats.bulanTerbanyak ? monthlyStats.bulanTerbanyak.bulanFull : '-'}
+          </div>
+          <div className="mt-1 flex items-center justify-between text-[10px]">
+            <span className="text-slate-500">Puncak:</span>
+            <span className="font-bold text-teal-700 bg-teal-50 border border-teal-200/80 px-1.5 py-0.2 rounded font-mono">
+              🏆 {monthlyStats.bulanTerbanyak ? `${monthlyStats.bulanTerbanyak.totalKegiatan} Keg` : '0'}
+            </span>
+          </div>
+        </div>
+
+        {/* 2. Bulan Paling Sedikit Kegiatan (Sky Blue) */}
+        <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-sky-200/80 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <span className="text-[11px] font-bold text-sky-900 truncate">Bulan Tersedikit</span>
+            <div className="w-5 h-5 rounded-md bg-sky-50 text-sky-700 flex items-center justify-center shrink-0">
+              <TrendingDown className="w-3 h-3 text-sky-600" />
+            </div>
+          </div>
+          <div className="text-sm sm:text-base font-black text-slate-800 truncate" title={monthlyStats.bulanTersedikit ? monthlyStats.bulanTersedikit.bulanFull : 'Belum Ada'}>
+            {monthlyStats.bulanTersedikit ? monthlyStats.bulanTersedikit.bulanFull : '-'}
+          </div>
+          <div className="mt-1 flex items-center justify-between text-[10px]">
+            <span className="text-slate-500">Terendah:</span>
+            <span className="font-bold text-sky-700 bg-sky-50 border border-sky-200/80 px-1.5 py-0.2 rounded font-mono">
+              📉 {monthlyStats.bulanTersedikit ? `${monthlyStats.bulanTersedikit.totalKegiatan} Keg` : '0'}
+            </span>
+          </div>
+        </div>
+
+        {/* 3. Kolom Pengeluaran */}
+        <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200/80 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <span className="text-[11px] font-semibold text-slate-600 truncate">Pengeluaran</span>
+            <div className="w-5 h-5 rounded-md bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+              <Receipt className="w-3 h-3 text-emerald-600" />
+            </div>
+          </div>
+          <div className="text-sm sm:text-base font-black text-slate-800 font-mono truncate" title={formatRupiah(totalPengeluaran)}>
             {formatRupiah(totalPengeluaran)}
           </div>
-          <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between">
-            <span>Dari {filteredDelegasi.length} kegiatan delegasi</span>
-            <span className="text-emerald-600 font-bold font-mono">
-              {filteredDelegasi.length > 0 ? formatRupiah(Math.round(totalPengeluaran / filteredDelegasi.length)) + '/kegiatan' : '-'}
-            </span>
+          <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
+            <span>Kegiatan:</span>
+            <span className="font-bold text-emerald-700 font-mono">{filteredDelegasi.length} keg</span>
           </div>
         </div>
 
-        {/* Uang Dibawa & Sisa Dikembalikan */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-slate-500">Total Uang Dibawa</span>
-            <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 border border-sky-100 flex items-center justify-center">
-              <Wallet className="w-4.5 h-4.5" />
+        {/* 4. Kolom Uang Dibawa */}
+        <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200/80 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <span className="text-[11px] font-semibold text-slate-600 truncate">Uang Dibawa</span>
+            <div className="w-5 h-5 rounded-md bg-sky-50 text-sky-700 flex items-center justify-center shrink-0">
+              <Wallet className="w-3 h-3 text-sky-600" />
             </div>
           </div>
-          <div className="text-xl font-bold text-slate-800 truncate" title={formatRupiah(totalDibawa)}>
+          <div className="text-sm sm:text-base font-black text-slate-800 font-mono truncate" title={formatRupiah(totalDibawa)}>
             {formatRupiah(totalDibawa)}
           </div>
-          <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
-            <span>Sisa dana dikembalikan:</span>
-            <span className="text-sky-600 font-bold font-mono">{formatRupiah(totalSisaKembali)}</span>
+          <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
+            <span>Sisa:</span>
+            <span className="font-bold text-sky-700 font-mono">{formatRupiah(totalSisaKembali)}</span>
           </div>
         </div>
 
-        {/* Kategori Terbesar */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-slate-500">Kategori Terbesar</span>
-            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center">
-              <PieChartIcon className="w-4.5 h-4.5" />
+        {/* 5. Kolom Rata-rata Bulan */}
+        <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200/80 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <span className="text-[11px] font-semibold text-slate-600 truncate">Rata-rata Bulan</span>
+            <div className="w-5 h-5 rounded-md bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0">
+              <Activity className="w-3 h-3 text-indigo-600" />
             </div>
           </div>
-          <div className="text-lg font-bold text-slate-800 truncate">
-            {topCategory ? topCategory.name : 'Belum Ada Data'}
+          <div className="text-sm sm:text-base font-black text-slate-800 font-mono truncate">
+            {monthlyStats.rataRataPerBulan} <span className="text-[10px] font-normal text-slate-500">keg/bln</span>
           </div>
-          <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
-            <span>{topCategory ? formatRupiah(topCategory.value) : '-'}</span>
-            <span className="text-indigo-600 font-bold font-mono">
-              {topCategory ? `${topCategory.percentage}%` : '-'}
-            </span>
+          <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
+            <span>Total:</span>
+            <span className="font-bold text-indigo-700 font-mono">{monthlyStats.totalKegiatan} keg</span>
           </div>
         </div>
 
-        {/* Realisasi Anggaran */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-slate-500">Realisasi Plafon</span>
-            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center">
-              <Coins className="w-4.5 h-4.5" />
+        {/* 6. Kolom Realisasi Plafon */}
+        <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200/80 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <span className="text-[11px] font-semibold text-slate-600 truncate">Realisasi Plafon</span>
+            <div className="w-5 h-5 rounded-md bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
+              <Coins className="w-3 h-3 text-teal-600" />
             </div>
           </div>
-          <div className="flex items-baseline justify-between">
-            <div className="text-xl font-bold text-slate-800 font-mono">
-              {persentasePlafon.toFixed(1)}%
-            </div>
-            <div className="text-xs font-medium text-slate-500 truncate" title={`Sisa Plafon: ${formatRupiah(sisaPlafon)}`}>
-              Sisa: {formatRupiah(sisaPlafon)}
-            </div>
+          <div className="text-sm sm:text-base font-black text-slate-800 font-mono truncate">
+            {persentasePlafon.toFixed(1)}%
           </div>
-          <div className="w-full bg-slate-100 h-2 rounded-full mt-2.5 overflow-hidden">
+          <div className="w-full bg-slate-100 h-1.5 rounded-full mt-1.5 overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-500 ${
-                persentasePlafon > 90 ? 'bg-rose-500' : persentasePlafon > 70 ? 'bg-amber-500' : 'bg-emerald-500'
+                persentasePlafon > 90 ? 'bg-rose-500' : persentasePlafon > 70 ? 'bg-teal-500' : 'bg-emerald-500'
               }`}
               style={{ width: `${Math.min(100, persentasePlafon)}%` }}
             />
@@ -413,33 +515,174 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
       {/* Main Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Chart 1: Pengeluaran Bulanan (2 Cols on Large Screen) */}
+        {/* Chart 1: Visualisasi Bulanan (Biaya & Jumlah Kegiatan) */}
         <div className="lg:col-span-2 bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 border-b border-slate-100 pb-3">
             <div>
               <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-emerald-600" />
-                <span>Pengeluaran Bulanan (Tahun {selectedYear === 'all' ? 'Semua' : selectedYear})</span>
+                <span>
+                  Visualisasi Bulanan (Kalender Hijriah Pesantren - {selectedYear === 'all' ? 'Semua Tahun' : `Tahun ${selectedYear} H`})
+                </span>
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Perbandingan uang dibawa vs realisasi uang terpakai setiap bulan
+                Monitoring jumlah kegiatan dan pengeluaran setiap bulan
               </p>
             </div>
-            <div className="flex items-center gap-3 text-xs font-semibold">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-sky-400" />
-                <span className="text-slate-600">Dibawa</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                <span className="text-slate-600">Terpakai</span>
-              </div>
+
+            {/* Metric Mode Selector */}
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold">
+              <button
+                id="btn-metric-both"
+                onClick={() => setChartMetric('both')}
+                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                  chartMetric === 'both' ? 'bg-white text-emerald-700 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Gabungan
+              </button>
+              <button
+                id="btn-metric-kegiatan"
+                onClick={() => setChartMetric('kegiatan')}
+                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                  chartMetric === 'kegiatan' ? 'bg-white text-teal-700 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Jml Kegiatan
+              </button>
+              <button
+                id="btn-metric-nominal"
+                onClick={() => setChartMetric('nominal')}
+                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                  chartMetric === 'nominal' ? 'bg-white text-emerald-700 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Nominal (Rp)
+              </button>
             </div>
+          </div>
+
+          {/* Legend Badges */}
+          <div className="flex flex-wrap items-center gap-4 text-xs font-semibold mb-2">
+            {(chartMetric === 'both' || chartMetric === 'nominal') && (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                  <span className="text-slate-600">Uang Terpakai</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-sky-400" />
+                  <span className="text-slate-600">Uang Dibawa</span>
+                </div>
+              </>
+            )}
+            {(chartMetric === 'both' || chartMetric === 'kegiatan') && (
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-teal-600" />
+                <span className="text-teal-800 font-bold">Jumlah Kegiatan (Sumbu Kanan)</span>
+              </div>
+            )}
           </div>
 
           <div className="h-72 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
-              {activeChartType === 'bar' ? (
+              {chartMetric === 'both' ? (
+                /* Composed Chart: Bar for Money + Line for Activity Count */
+                <ComposedChart data={monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis 
+                    dataKey="bulan" 
+                    tick={{ fontSize: 11, fill: '#64748b' }} 
+                    axisLine={{ stroke: '#e2e8f0' }}
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    yAxisId="left"
+                    tick={{ fontSize: 10, fill: '#64748b' }} 
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(val) => {
+                      if (val >= 1000000) return `${(val / 1000000).toFixed(1)}jt`;
+                      if (val >= 1000) return `${(val / 1000).toFixed(0)}rb`;
+                      return `${val}`;
+                    }}
+                  />
+                  <YAxis 
+                    yAxisId="right"
+                    orientation="right"
+                    allowDecimals={false}
+                    tick={{ fontSize: 10, fill: '#0d9488', fontWeight: 'bold' }} 
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(val) => `${val} keg`}
+                  />
+                  <Tooltip content={<CustomBarTooltip />} />
+                  <Bar 
+                    yAxisId="left"
+                    dataKey="uangDibawa" 
+                    name="Uang Dibawa" 
+                    fill="#38bdf8" 
+                    radius={[4, 4, 0, 0]} 
+                    maxBarSize={18}
+                  />
+                  <Bar 
+                    yAxisId="left"
+                    dataKey="uangTerpakai" 
+                    name="Uang Terpakai" 
+                    fill="#10b981" 
+                    radius={[4, 4, 0, 0]} 
+                    maxBarSize={18}
+                  />
+                  <Line 
+                    yAxisId="right"
+                    type="monotone" 
+                    dataKey="totalKegiatan" 
+                    name="Jumlah Kegiatan" 
+                    stroke="#0d9488" 
+                    strokeWidth={3}
+                    dot={{ r: 4, fill: '#0d9488', stroke: '#ffffff', strokeWidth: 2 }}
+                    activeDot={{ r: 6, fill: '#0f766e' }}
+                  />
+                </ComposedChart>
+              ) : chartMetric === 'kegiatan' ? (
+                /* Bar Chart: Fokus Jumlah Kegiatan */
+                <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis 
+                    dataKey="bulan" 
+                    tick={{ fontSize: 11, fill: '#64748b' }} 
+                    axisLine={{ stroke: '#e2e8f0' }}
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    allowDecimals={false}
+                    tick={{ fontSize: 10, fill: '#64748b' }} 
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(val) => `${val} kegiatan`}
+                  />
+                  <Tooltip content={<CustomBarTooltip />} />
+                  <Bar 
+                    dataKey="totalKegiatan" 
+                    name="Jumlah Kegiatan" 
+                    fill="#0d9488" 
+                    radius={[6, 6, 0, 0]} 
+                    maxBarSize={28}
+                  >
+                    {monthlyData.map((entry, index) => {
+                      const isMax = entry.totalKegiatan > 0 && entry.totalKegiatan === monthlyStats.maxKegiatan;
+                      const isMin = entry.totalKegiatan > 0 && entry.totalKegiatan === monthlyStats.minKegiatan;
+                      return (
+                        <Cell 
+                          key={`bar-${index}`} 
+                          fill={isMax ? '#0d9488' : isMin ? '#0284c7' : '#5eead4'} 
+                        />
+                      );
+                    })}
+                  </Bar>
+                </BarChart>
+              ) : (
+                /* Bar Chart: Nominal Saja */
                 <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis 
@@ -474,55 +717,6 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
                     maxBarSize={22}
                   />
                 </BarChart>
-              ) : (
-                <AreaChart data={monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorTerpakai" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0.0}/>
-                    </linearGradient>
-                    <linearGradient id="colorDibawa" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis 
-                    dataKey="bulan" 
-                    tick={{ fontSize: 11, fill: '#64748b' }} 
-                    axisLine={{ stroke: '#e2e8f0' }}
-                    tickLine={false}
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 10, fill: '#64748b' }} 
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(val) => {
-                      if (val >= 1000000) return `${(val / 1000000).toFixed(1)}jt`;
-                      if (val >= 1000) return `${(val / 1000).toFixed(0)}rb`;
-                      return `${val}`;
-                    }}
-                  />
-                  <Tooltip content={<CustomBarTooltip />} />
-                  <Area 
-                    type="monotone" 
-                    dataKey="uangDibawa" 
-                    name="Uang Dibawa" 
-                    stroke="#0284c7" 
-                    strokeWidth={2}
-                    fillOpacity={1} 
-                    fill="url(#colorDibawa)" 
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="uangTerpakai" 
-                    name="Uang Terpakai" 
-                    stroke="#059669" 
-                    strokeWidth={2.5}
-                    fillOpacity={1} 
-                    fill="url(#colorTerpakai)" 
-                  />
-                </AreaChart>
               )}
             </ResponsiveContainer>
           </div>
@@ -570,7 +764,6 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
                   <Tooltip content={<CustomPieTooltip />} />
                 </PieChart>
               </ResponsiveContainer>
-              {/* Inner Donut Total Badge */}
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                 <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Total</span>
                 <span className="text-xs font-bold text-slate-800 font-mono">
@@ -598,6 +791,133 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
           </div>
         </div>
 
+      </div>
+
+      {/* TABEL REKAPITULASI INTENSITAS KEGIATAN & PENGELUARAN PER BULAN (KOMPAK & RINGKAS) */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="p-3.5 sm:p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50/50">
+          <div>
+            <h3 className="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-emerald-600" />
+              <span>Tabel Rekapitulasi Bulanan Kalender Hijriah</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Urutan siklus pesantren: Syawal s.d. Ramadhan dengan rincian kegiatan dan keuangan
+            </p>
+          </div>
+
+          {/* Sort Controls */}
+          <div className="flex items-center gap-1.5 bg-white border border-slate-200 px-2.5 py-1 rounded-lg text-xs shadow-2xs">
+            <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
+            <span className="text-slate-500 font-medium">Urutan:</span>
+            <select
+              id="select-urut-tabel-kegiatan"
+              value={tableSortBy}
+              onChange={(e) => setTableSortBy(e.target.value as any)}
+              className="bg-transparent font-semibold text-slate-700 focus:outline-hidden cursor-pointer"
+            >
+              <option value="calendar">Siklus Kalender (Syawal → Ramadhan)</option>
+              <option value="kegiatan-desc">Kegiatan Terbanyak → Sedikit</option>
+              <option value="nominal-desc">Pengeluaran Terbesar → Terkecil</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200/70 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
+                <th className="py-2.5 px-3">Bulan Hijriah</th>
+                <th className="py-2.5 px-3 text-center">Jml Kegiatan</th>
+                <th className="py-2.5 px-3 text-right">Pengeluaran</th>
+                <th className="py-2.5 px-3 text-right">Uang Dibawa</th>
+                <th className="py-2.5 px-3 text-right">Sisa Kembali</th>
+                <th className="py-2.5 px-3 text-right">Rata-rata/Keg</th>
+                <th className="py-2.5 px-3 text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-slate-700">
+              {tableMonthlyData.map((m) => {
+                const sisa = Math.max(0, m.uangDibawa - m.uangTerpakai);
+                const rataRata = m.totalKegiatan > 0 ? Math.round(m.uangTerpakai / m.totalKegiatan) : 0;
+                const isMax = m.totalKegiatan > 0 && m.totalKegiatan === monthlyStats.maxKegiatan;
+                const isMin = m.totalKegiatan > 0 && m.totalKegiatan === monthlyStats.minKegiatan && !isMax;
+                const isZero = m.totalKegiatan === 0;
+
+                return (
+                  <tr 
+                    key={m.bulanFull} 
+                    className={`transition-colors hover:bg-slate-50/70 ${
+                      isMax ? 'bg-teal-50/40 font-semibold' : ''
+                    }`}
+                  >
+                    <td className="py-2 px-3 font-semibold text-slate-800 whitespace-nowrap">
+                      <span>{m.bulanFull}</span>
+                    </td>
+
+                    <td className="py-2 px-3 text-center whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-1">
+                        <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full font-mono font-bold text-[11px] ${
+                          isMax 
+                            ? 'bg-teal-600 text-white shadow-xs' 
+                            : isMin 
+                            ? 'bg-sky-100 text-sky-800 border border-sky-200' 
+                            : isZero 
+                            ? 'bg-slate-100 text-slate-400' 
+                            : 'bg-emerald-100 text-emerald-800'
+                        }`}>
+                          {m.totalKegiatan} keg
+                        </span>
+                        {isMax && (
+                          <span className="text-xs" title="Bulan paling banyak kegiatan">🏆</span>
+                        )}
+                        {isMin && (
+                          <span className="text-xs" title="Bulan paling sedikit kegiatan">📉</span>
+                        )}
+                      </div>
+                    </td>
+
+                    <td className="py-2 px-3 text-right font-mono font-bold text-slate-800 whitespace-nowrap">
+                      {m.uangTerpakai > 0 ? formatRupiah(m.uangTerpakai) : '-'}
+                    </td>
+
+                    <td className="py-2 px-3 text-right font-mono text-slate-600 whitespace-nowrap">
+                      {m.uangDibawa > 0 ? formatRupiah(m.uangDibawa) : '-'}
+                    </td>
+
+                    <td className="py-2 px-3 text-right font-mono text-sky-700 whitespace-nowrap">
+                      {sisa > 0 ? formatRupiah(sisa) : '-'}
+                    </td>
+
+                    <td className="py-2 px-3 text-right font-mono text-slate-500 whitespace-nowrap">
+                      {rataRata > 0 ? formatRupiah(rataRata) : '-'}
+                    </td>
+
+                    <td className="py-2 px-3 text-center whitespace-nowrap">
+                      {isMax ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-300">
+                          🏆 Paling Padat
+                        </span>
+                      ) : isZero ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-400">
+                          Nihil
+                        </span>
+                      ) : isMin ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-sky-100 text-sky-700 border border-sky-200">
+                          Senggang
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600">
+                          Reguler
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Secondary Row: Breakdown Table & Top Destinations */}

@@ -72,9 +72,11 @@ class MainActivity : AppCompatActivity() {
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         settings.mediaPlaybackRequiresUserGesture = false
         settings.cacheMode = WebSettings.LOAD_DEFAULT
+        settings.javaScriptCanOpenWindowsAutomatically = true
+        settings.setSupportMultipleWindows(false) // Mencegah popup blank window
 
-        // Hardware acceleration untuk grafis halus
-        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        // Set latar belakang putih bersih & cegah GPU deadlock di HP jadul/tanpa Chrome
+        webView.setBackgroundColor(android.graphics.Color.WHITE)
 
         // 2. WebViewClient Murni: Mengunci semua tautan agar TIDAK MELEMPAR KE CHROME
         webView.webViewClient = object : WebViewClient() {
@@ -449,6 +451,17 @@ dependencies {
                   <h4 className="font-bold text-slate-800">Build APK Langsung</h4>
                   <p className="text-slate-600">
                     Klik menu atas: <strong>Build</strong> &gt; <strong>Build Bundle(s) / APK(s)</strong> &gt; <strong>Build APK(s)</strong>. File APK siap dibagikan ke seluruh pengurus!
+                  </p>
+                </div>
+              </div>
+
+              {/* Catatan Auto-Update OTA */}
+              <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-2xl flex items-start gap-3">
+                <Sparkles className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-emerald-950 space-y-1">
+                  <p className="font-bold text-emerald-900 text-sm">Otomatis Update Tanpa Download Ulang APK</p>
+                  <p className="text-emerald-800 leading-relaxed">
+                    Karena WebView memuat kode web dengan Service Worker dan Cloud Realtime Sync, setiap kali ada penambahan fitur, perubahan tabel, atau perbaikan sistem, <strong>seluruh HP yang sudah menginstal APK ini otomatis berubah dan terupdate</strong> saat aplikasi dibuka tanpa perlu mengunduh atau menginstal file APK baru!
                   </p>
                 </div>
               </div>

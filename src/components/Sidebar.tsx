@@ -19,6 +19,7 @@ interface SidebarProps {
   mobileOpen: boolean;
   setMobileOpen: (open: boolean) => void;
   onOpenAndroidGuide?: () => void;
+  onOpenAutoUpdateModal?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -26,7 +27,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectPage,
   mobileOpen,
   setMobileOpen,
-  onOpenAndroidGuide
+  onOpenAndroidGuide,
+  onOpenAutoUpdateModal
 }) => {
   const menuItems: { id: PageView; label: string; icon: React.ReactNode }[] = [
     { id: 'dashboard', label: 'Dashboard Utama', icon: <LayoutDashboard className="w-4.5 h-4.5" /> },
@@ -111,7 +113,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
 
         {/* Footer info badge & Android APK Guide trigger */}
-        <div className="p-4 border-t border-slate-700/50 space-y-2.5">
+        <div className="p-4 border-t border-slate-700/50 space-y-2">
+          {onOpenAutoUpdateModal && (
+            <button
+              id="sidebar-btn-auto-update"
+              onClick={() => {
+                onOpenAutoUpdateModal();
+                setMobileOpen(false);
+              }}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold bg-slate-800/90 text-slate-200 border border-slate-700 hover:bg-slate-800 hover:border-emerald-500/40 transition-all cursor-pointer group"
+            >
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <span className="text-slate-300 group-hover:text-white">Auto-Update: Aktif</span>
+              </div>
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.5 rounded">
+                OTA
+              </span>
+            </button>
+          )}
+
           {onOpenAndroidGuide && (
             <button
               id="sidebar-btn-apk-guide"
@@ -132,8 +153,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
 
           <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-900/60 px-3.5 py-2 rounded-xl border border-slate-800">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-            <span className="truncate">Data Tersimpan Otomatis</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+            <span className="truncate">Data Tersimpan Cloud Realtime</span>
           </div>
         </div>
       </aside>

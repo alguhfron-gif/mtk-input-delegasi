@@ -10,8 +10,9 @@ import { AnggaranTab } from './components/AnggaranTab';
 import { AnalitikKeuangan } from './components/AnalitikKeuangan';
 import { BackupTab } from './components/BackupTab';
 import { NotaModal } from './components/NotaModal';
-import { InstallPromptBanner } from './components/InstallPromptBanner';
+import { RealtimeNotificationBanner } from './components/RealtimeNotificationBanner';
 import { AndroidStudioGuideModal } from './components/AndroidStudioGuideModal';
+import { AutoUpdateManager } from './components/AutoUpdateManager';
 import { 
   Menu, 
   Cloud, 
@@ -19,7 +20,8 @@ import {
   Smartphone, 
   Globe, 
   RefreshCw,
-  Download
+  Download,
+  Radio
 } from 'lucide-react';
 import {
   subscribePeserta,
@@ -60,6 +62,26 @@ export default function App() {
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isAndroidGuideOpen, setIsAndroidGuideOpen] = useState<boolean>(false);
+  const [isAutoUpdateModalOpen, setIsAutoUpdateModalOpen] = useState<boolean>(false);
+  const [isBottomNavHidden, setIsBottomNavHidden] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('mtk_hide_bottom_nav') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleBottomNav = () => {
+    setIsBottomNavHidden(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('mtk_hide_bottom_nav', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
 
   // Data States with LocalStorage fallback
   const [pesertaList, setPesertaList] = useState<Peserta[]>(() => {
@@ -307,7 +329,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex text-slate-800 font-sans antialiased selection:bg-emerald-100 selection:text-emerald-900 pb-16 lg:pb-0">
+    <div className={`min-h-screen bg-[#F8FAFC] flex text-slate-800 font-sans antialiased selection:bg-emerald-100 selection:text-emerald-900 ${isBottomNavHidden ? 'pb-6' : 'pb-16'} lg:pb-0`}>
       {/* Sidebar Navigation for Desktop */}
       <Sidebar
         activePage={activePage}
@@ -320,6 +342,7 @@ export default function App() {
         mobileOpen={mobileOpen}
         setMobileOpen={setMobileOpen}
         onOpenAndroidGuide={() => setIsAndroidGuideOpen(true)}
+        onOpenAutoUpdateModal={() => setIsAutoUpdateModalOpen(true)}
       />
 
       {/* Main Content Viewport */}
@@ -327,12 +350,16 @@ export default function App() {
         {/* Top Navbar Header for Mobile & Desktop */}
         <header className="bg-[#1E293B] text-white px-4 py-3 sm:px-6 sm:py-3.5 flex items-center justify-between shadow-xs sticky top-0 z-30 border-b border-slate-700/50">
           <div className="flex items-center gap-2.5">
+            {/* Tombol Hamburger Menu HP */}
             <button
               id="mobile-hamburger-btn"
               onClick={() => setMobileOpen(true)}
-              className="lg:hidden p-1.5 hover:bg-slate-800 rounded-xl text-slate-300 hover:text-white transition-colors"
+              className="lg:hidden flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl border border-slate-600 active:scale-95 transition-all shadow-xs cursor-pointer"
+              title="Buka Menu Navigasi Hamburger"
+              aria-label="Menu Hamburger"
             >
-              <Menu className="w-5 h-5" />
+              <Menu className="w-5 h-5 text-emerald-400" />
+              <span className="text-xs font-bold text-slate-100">Menu</span>
             </button>
             <div className="flex items-center gap-2">
               <span className="font-bold text-sm sm:text-base text-white tracking-tight">
@@ -346,6 +373,21 @@ export default function App() {
 
           {/* Header Action Buttons */}
           <div className="flex items-center gap-2">
+            {/* Tombol Status Auto-Update (OTA Otomatis) */}
+            <button
+              id="btn-header-auto-update"
+              onClick={() => setIsAutoUpdateModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800/90 hover:bg-slate-700/90 active:scale-95 text-slate-200 rounded-xl border border-slate-700 hover:border-emerald-500/40 text-xs font-semibold transition-all cursor-pointer shadow-xs"
+              title="Sistem Pembaruan Otomatis (OTA) Aktif: Setiap pembaruan langsung terpasang di semua HP"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span className="text-slate-200 hidden sm:inline">Auto-Update: Aktif</span>
+              <span className="text-emerald-300 sm:hidden font-bold">OTA</span>
+              <span className="hidden md:inline-block text-[9px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.2 rounded border border-emerald-500/30">
+                Otomatis
+              </span>
+            </button>
+
             <button
               id="btn-header-apk-guide"
               onClick={() => setIsAndroidGuideOpen(true)}
@@ -448,6 +490,9 @@ export default function App() {
           }
           setActivePage(page);
         }}
+        onOpenMenu={() => setMobileOpen(true)}
+        isHidden={isBottomNavHidden}
+        onToggleHidden={handleToggleBottomNav}
       />
 
       {/* Print / Save Image Nota Modal */}
@@ -459,8 +504,14 @@ export default function App() {
         />
       )}
 
-      {/* Direct Install PWA Banner & Quick Install Guide */}
-      <InstallPromptBanner />
+      {/* Real-time Broadcast Notifications across HP and Laptop */}
+      <RealtimeNotificationBanner />
+
+      {/* Auto-Update Manager (OTA Automatic Update System) */}
+      <AutoUpdateManager
+        isModalOpen={isAutoUpdateModalOpen}
+        onCloseModal={() => setIsAutoUpdateModalOpen(false)}
+      />
 
       {/* Android Studio WebView APK Source Code & Setup Modal */}
       <AndroidStudioGuideModal

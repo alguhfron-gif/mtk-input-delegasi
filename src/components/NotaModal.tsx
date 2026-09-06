@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Delegasi, Peserta } from '../types';
 import { formatRupiah, formatTanggalMasehi, formatTanggalHijri } from '../utils/format';
-import { exportNotaPDF, triggerFileDownload } from '../utils/exportUtils';
+import { exportNotaPDF, triggerFileDownload, downloadDataUrl } from '../utils/exportUtils';
+import { LogoMTK } from './LogoMTK';
 import { 
   Printer, 
   X, 
@@ -11,8 +12,8 @@ import {
   Loader2, 
   Image as ImageIcon,
   FileText,
-  Eye,
-  Smartphone
+  Smartphone,
+  Eye
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
@@ -40,6 +41,7 @@ export const NotaModal: React.FC<NotaModalProps> = ({
   });
 
   const totalSisa = delegasi.uangDibawa - delegasi.uangTerpakai;
+  const fileName = `nota_delegasi_${delegasi.id}_${delegasi.tujuan.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20)}.png`;
 
   // Print via browser/system dialog
   const handlePrint = () => {
@@ -74,7 +76,7 @@ export const NotaModal: React.FC<NotaModalProps> = ({
     try {
       setIsGeneratingImage(true);
 
-      // Render the element to high-res canvas (scale 3 for ultra crisp text on mobile)
+      // Render the element to high-res canvas (scale 3 for crisp text on mobile)
       const canvas = await html2canvas(notaElement, {
         scale: 3,
         backgroundColor: '#ffffff',
@@ -87,50 +89,51 @@ export const NotaModal: React.FC<NotaModalProps> = ({
       const dataUrl = canvas.toDataURL('image/png');
       setPreviewImage(dataUrl);
 
-      const fileName = `nota_delegasi_${delegasi.id}_${delegasi.tujuan.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20)}.png`;
+      // 1. Direct download trigger using Data URL (standard for Chrome, Android & iOS WebKit)
+      downloadDataUrl(dataUrl, fileName);
 
-      // Convert to blob for download & native share
-      canvas.toBlob(async (blob) => {
+      // 2. Also convert to Blob for native file download retention
+      canvas.toBlob((blob) => {
         if (blob) {
-          // Check if Web Share API with files is supported (mobile native share to gallery/whatsapp)
-          if (navigator.canShare && navigator.canShare({ files: [new File([blob], fileName, { type: 'image/png' })] })) {
-            try {
-              await navigator.share({
-                files: [new File([blob], fileName, { type: 'image/png' })],
-                title: 'Nota Delegasi MTK',
-                text: `Nota Kegiatan Delegasi: ${delegasi.tujuan}`
-              });
-              setIsGeneratingImage(false);
-              setDownloadSuccess(true);
-              setTimeout(() => setDownloadSuccess(false), 3000);
-              return;
-            } catch (shareErr) {
-              console.log('Share dismissed or cancelled, falling back to direct download', shareErr);
-            }
-          }
-
-          // Fallback / Standard Direct File Download
           triggerFileDownload(blob, fileName);
-        } else {
-          // If blob conversion fails, use DataURL anchor download
-          const link = document.createElement('a');
-          link.href = dataUrl;
-          link.download = fileName;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
         }
-
-        setIsGeneratingImage(false);
-        setDownloadSuccess(true);
-        setTimeout(() => setDownloadSuccess(false), 4000);
       }, 'image/png');
+
+      setIsGeneratingImage(false);
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 4000);
 
     } catch (err) {
       console.error('Error generating nota image:', err);
       alert('Gagal membuat gambar nota. Mengalihkan ke unduhan PDF...');
       setIsGeneratingImage(false);
       handleDownloadPDF();
+    }
+  };
+
+  // Share via Web Share API
+  const handleShare = async () => {
+    if (!previewImage) {
+      await handleDownloadImage();
+    }
+    try {
+      const notaElement = document.getElementById('printable-nota');
+      if (!notaElement) return;
+      const canvas = await html2canvas(notaElement, { scale: 2.5, backgroundColor: '#ffffff' });
+      canvas.toBlob(async (blob) => {
+        if (blob && navigator.share) {
+          const file = new File([blob], fileName, { type: 'image/png' });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: 'Nota Delegasi MTK',
+              text: `Nota Delegasi MTK: ${delegasi.tujuan}`
+            });
+          }
+        }
+      }, 'image/png');
+    } catch (e) {
+      console.log('Share dismissed or not supported', e);
     }
   };
 
@@ -217,26 +220,63 @@ export const NotaModal: React.FC<NotaModalProps> = ({
 
         {/* Scrollable Modal Content */}
         <div className="overflow-y-auto p-4 sm:p-6 bg-slate-50 flex flex-col items-center gap-4">
-          {/* Success Banner if image was generated */}
+          {/* Card Hasil Gambar untuk Galeri HP */}
           {previewImage && (
-            <div className="w-full max-w-xl p-3 bg-emerald-50 border border-emerald-300 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-emerald-900 shadow-xs no-print">
-              <div className="flex items-center gap-2">
-                <Smartphone className="w-5 h-5 text-emerald-600 shrink-0" />
-                <span>
-                  <strong>Gambar nota telah dibuat!</strong> Jika di HP Anda tidak langsung tersimpan otomatis, sentuh dan tahan gambar di bawah lalu pilih <em>"Simpan Gambar"</em>.
+            <div className="w-full max-w-xl p-4 bg-emerald-50 border-2 border-emerald-400/80 rounded-2xl flex flex-col gap-3 text-xs text-emerald-950 shadow-sm no-print animate-fadeIn">
+              <div className="flex items-center justify-between gap-2 border-b border-emerald-200 pb-2">
+                <div className="flex items-center gap-2">
+                  <Smartphone className="w-5 h-5 text-emerald-700 shrink-0" />
+                  <span className="font-bold text-sm text-emerald-900">
+                    Foto Nota Siap Disimpan ke Galeri HP
+                  </span>
+                </div>
+                <span className="text-[10px] bg-emerald-700 text-white font-bold px-2 py-0.5 rounded-full">
+                  PNG HD
                 </span>
               </div>
-              <button
-                onClick={() => {
-                  const link = document.createElement('a');
-                  link.href = previewImage;
-                  link.download = `nota_delegasi_${delegasi.id}.png`;
-                  link.click();
-                }}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shrink-0 cursor-pointer shadow-xs"
-              >
-                Unduh Ulang
-              </button>
+
+              {/* RENDERED IMAGE: User can long-press this image to save to native gallery! */}
+              <div className="bg-white p-2 rounded-xl border border-emerald-300 shadow-inner flex flex-col items-center">
+                <img 
+                  id="preview-nota-image"
+                  src={previewImage} 
+                  alt={`Nota ${delegasi.tujuan}`}
+                  className="w-full h-auto object-contain rounded-lg border border-slate-100 max-h-[50vh] cursor-pointer"
+                  onClick={() => downloadDataUrl(previewImage, fileName)}
+                  title="Sentuh atau klik untuk mengunduh gambar"
+                />
+              </div>
+
+              {/* Petunjuk Simpan ke Galeri HP */}
+              <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-200 text-slate-700 space-y-1">
+                <p className="font-bold text-emerald-800 flex items-center gap-1.5 text-xs">
+                  <span>📱</span>
+                  <span>Cara Simpan ke Galeri Foto HP:</span>
+                </p>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Sentuh dan tahan (tekan lama) pada gambar nota di atas selama 1 detik, lalu pilih menu <strong>"Simpan Gambar"</strong> atau <strong>"Download Gambar"</strong>. Gambar akan langsung tersimpan di album foto HP Anda.
+                </p>
+              </div>
+
+              {/* Action Buttons for Image */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button
+                  onClick={() => downloadDataUrl(previewImage, fileName)}
+                  className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Unduh File Gambar</span>
+                </button>
+
+                <button
+                  onClick={handleShare}
+                  className="py-2 px-3.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                  title="Bagikan melalui WhatsApp atau simpan"
+                >
+                  <Share2 className="w-4 h-4" />
+                  <span>Bagikan</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -245,14 +285,19 @@ export const NotaModal: React.FC<NotaModalProps> = ({
             id="printable-nota" 
             className="p-6 sm:p-8 font-mono text-slate-800 bg-white shadow-sm border border-slate-200/80 rounded-2xl w-full max-w-xl space-y-5"
           >
-            {/* Header */}
-            <div className="text-center border-b-2 border-slate-800 pb-3">
-              <div className="inline-block bg-slate-900 text-white text-[10px] font-sans font-bold px-2.5 py-0.5 rounded-full mb-1 tracking-wider">
-                MTK DELEGASI & KEUANGAN
+            {/* Header Nota: Logo MTK di Kiri & Tulisan di Kanan */}
+            <div className="border-b-2 border-slate-900 pb-3.5 flex items-center gap-4">
+              <div className="shrink-0 flex items-center justify-center">
+                <LogoMTK className="w-14 h-14 sm:w-16 sm:h-16 object-contain" />
               </div>
-              <h2 className="text-base sm:text-lg font-bold uppercase tracking-wider text-slate-900">
-                NOTA PENGELUARAN DELEGASI
-              </h2>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-base sm:text-xl font-black uppercase tracking-wider text-slate-900 font-sans leading-tight">
+                  NOTA PENGELUARAN DELEGASI
+                </h2>
+                <p className="text-[10px] sm:text-[11px] text-slate-500 font-mono mt-1 uppercase tracking-wider font-semibold">
+                  Musyawarah wa Taklimul Kitab (MTK) Sidogiri
+                </p>
+              </div>
             </div>
 
             {/* Kolom Informasi Delegasi (Tujuan, Peserta, Jadwal) */}

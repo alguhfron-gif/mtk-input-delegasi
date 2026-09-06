@@ -12,6 +12,11 @@
     <meta property="og:type" content="website" />
     <meta property="og:image" content="/icon-512.png" />
 
+    <!-- Cache-Control Meta Tags: Mencegah HP menyimpan versi HTML basi -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+
     <!-- PWA Web App Manifest -->
     <link rel="manifest" href="/manifest.json" />
 
@@ -39,7 +44,20 @@
     <meta name="msapplication-navbutton-color" content="#1e40af" />
   </head>
   <body class="bg-slate-50 antialiased select-none overscroll-none">
-    <div id="root"></div>
+    <div id="root">
+      <!-- Loading Splash Anti-Blank: Akan otomatis digantikan saat React selesai di-mount -->
+      <div style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px; text-align: center;">
+        <div style="width: 44px; height: 44px; border: 4px solid #e2e8f0; border-top-color: #1e40af; border-radius: 50%; animation: mtkSpin 0.8s linear infinite; margin-bottom: 16px;"></div>
+        <div style="font-weight: 700; color: #1e3a8a; font-size: 16px; letter-spacing: -0.01em;">MTK - Manajemen Delegasi</div>
+        <div style="font-size: 12px; color: #64748b; margin-top: 6px;">Memuat sistem & menyinkronkan data...</div>
+      </div>
+      <style>
+        @keyframes mtkSpin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      </style>
+    </div>
     
     <!-- Compatibility Guard untuk HP Lama & WebView Tanpa Chrome -->
     <script>
@@ -66,19 +84,95 @@
 
     <script type="module" src="/src/main.tsx"></script>
     
-    <!-- PWA Service Worker Registration -->
+    <!-- PWA Service Worker Registration & Auto-Update Engine -->
     <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
+      (function() {
+        if (!('serviceWorker' in navigator)) return;
+
+        var refreshing = false;
+        // Tangani saat service worker versi baru mengambil alih kendali
+        navigator.serviceWorker.addEventListener('controllerchange', function() {
+          if (refreshing) return;
+          refreshing = true;
+          console.log('[Auto-Update] Controller changed. Memperbarui aplikasi ke versi terbaru...');
+          // Muat ulang dengan bersih agar aset terbaru langsung dipakai
+          window.location.reload();
+        });
+
+        // Dengarkan pesan dari sw.js
+        navigator.serviceWorker.addEventListener('message', function(event) {
+          if (event.data && event.data.type === 'SW_VERSION_ACTIVATED') {
+            console.log('[Auto-Update] Versi Service Worker baru aktif:', event.data.cacheName);
+            window.dispatchEvent(new CustomEvent('mtk:app-updated', { detail: event.data }));
+          }
+        });
+
+        window.addEventListener('load', function() {
           navigator.serviceWorker.register('/sw.js', { scope: '/' })
-            .then((registration) => {
-              console.log('PWA: ServiceWorker registration successful with scope:', registration.scope);
+            .then(function(registration) {
+              console.log('PWA: ServiceWorker aktif di scope:', registration.scope);
+
+              // 1. Cek pembaruan berkala saat ada service worker baru menunggu
+              if (registration.waiting) {
+                registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+              }
+
+              registration.addEventListener('updatefound', function() {
+                var newWorker = registration.installing;
+                if (!newWorker) return;
+                newWorker.addEventListener('statechange', function() {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    console.log('[Auto-Update] Versi baru ditemukan & terpasang. Mengaktifkan...');
+                    newWorker.postMessage({ type: 'SKIP_WAITING' });
+                  }
+                });
+              });
+
+              // 2. Cek pembaruan setiap kali pengguna membuka atau kembali ke aplikasi di HP
+              document.addEventListener('visibilitychange', function() {
+                if (document.visibilityState === 'visible' && navigator.onLine) {
+                  registration.update().catch(function(err) {
+                    console.warn('[Auto-Update] Cek pembaruan via visibility:', err);
+                  });
+                }
+              });
+
+              // 3. Cek pembaruan otomatis berkala setiap 60 detik saat online
+              setInterval(function() {
+                if (navigator.onLine) {
+                  registration.update().catch(function() {});
+                }
+              }, 60000);
+
+              // Helper global untuk cek pembaruan manual dari tombol aplikasi
+              window.__checkMTKAppUpdate = function() {
+                return registration.update().then(function() {
+                  return true;
+                }).catch(function() {
+                  return false;
+                });
+              };
             })
-            .catch((err) => {
-              console.warn('PWA: ServiceWorker registration skipped/failed:', err);
+            .catch(function(err) {
+              console.warn('PWA: Gagal mendaftarkan ServiceWorker:', err);
             });
         });
-      }
+
+        // Helper global untuk force clear cache & reload
+        window.__forceMTKAppReload = function() {
+          if ('caches' in window) {
+            caches.keys().then(function(names) {
+              return Promise.all(names.map(function(name) {
+                return caches.delete(name);
+              }));
+            }).then(function() {
+              window.location.reload();
+            });
+          } else {
+            window.location.reload();
+          }
+        };
+      })();
     </script>
     <noscript>
       <div style="padding: 24px; text-align: center; font-family: sans-serif; background: #ffffff; color: #1e293b;">

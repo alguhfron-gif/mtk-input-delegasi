@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { Peserta, Delegasi } from '../types';
+import { triggerAlert } from '../utils/notifications';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -63,16 +64,68 @@ export const PESERTA_COLLECTION = 'peserta';
 export const DELEGASI_COLLECTION = 'delegasi';
 export const CONFIG_COLLECTION = 'config';
 export const ANGGARAN_DOC = 'anggaran';
+export const APP_VERSION_DOC = 'app_version';
+
+export interface AppVersionState {
+  version: string;
+  buildTime: string;
+  updateNotes: string;
+  forceReloadTime?: string;
+  updatedAt?: string;
+}
+
+export const LOCAL_APP_VERSION = '2.5.0';
+export const LOCAL_BUILD_TIME = '2026-09-06T08:30:00Z';
 
 // -------------------------------------------------------------
 // Realtime Subscriptions
 // -------------------------------------------------------------
+
+export function subscribeAppVersion(
+  onData: (data: AppVersionState) => void,
+  onError?: (err: unknown) => void
+) {
+  const docRef = doc(db, CONFIG_COLLECTION, APP_VERSION_DOC);
+  return onSnapshot(
+    docRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data() as AppVersionState;
+        onData(data);
+      }
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, `${CONFIG_COLLECTION}/${APP_VERSION_DOC}`);
+      if (onError) onError(error);
+    }
+  );
+}
+
+export async function broadcastNewAppVersion(updateNotes: string = 'Pembaruan otomatis sistem delegasi MTK'): Promise<void> {
+  const path = `${CONFIG_COLLECTION}/${APP_VERSION_DOC}`;
+  try {
+    const docRef = doc(db, CONFIG_COLLECTION, APP_VERSION_DOC);
+    const now = new Date().toISOString();
+    await setDoc(docRef, {
+      version: LOCAL_APP_VERSION,
+      buildTime: now,
+      forceReloadTime: now,
+      updateNotes,
+      updatedAt: now
+    }, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+    throw error;
+  }
+}
 
 export function subscribePeserta(
   onData: (peserta: Peserta[]) => void,
   onError?: (err: unknown) => void
 ) {
   const colRef = collection(db, PESERTA_COLLECTION);
+  let isFirstLoad = true;
+
   return onSnapshot(
     colRef,
     (snapshot) => {
@@ -88,6 +141,21 @@ export function subscribePeserta(
         });
       });
       onData(list);
+
+      // Notifikasi otomatis jika ada penambahan peserta baru
+      if (!isFirstLoad) {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const d = change.doc.data() as Partial<Peserta>;
+            triggerAlert(
+              'peserta',
+              'Santri/Peserta Baru Ditambahkan',
+              `Nama: ${d.nama || 'Peserta'} (${d.domisili || 'Santri'})`
+            );
+          }
+        });
+      }
+      isFirstLoad = false;
     },
     (error) => {
       handleFirestoreError(error, OperationType.LIST, PESERTA_COLLECTION);
@@ -101,6 +169,8 @@ export function subscribeDelegasi(
   onError?: (err: unknown) => void
 ) {
   const colRef = collection(db, DELEGASI_COLLECTION);
+  let isFirstLoad = true;
+
   return onSnapshot(
     colRef,
     (snapshot) => {
@@ -121,6 +191,22 @@ export function subscribeDelegasi(
       // Sort by ID (chronological)
       list.sort((a, b) => a.id - b.id);
       onData(list);
+
+      // Notifikasi otomatis jika ada penambahan delegasi baru di HP/Komputer mana pun
+      if (!isFirstLoad) {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const d = change.doc.data();
+            const countPeserta = Array.isArray(d.peserta) ? d.peserta.length : 0;
+            triggerAlert(
+              'delegasi',
+              'Delegasi Baru Ditambahkan!',
+              `Tujuan: ${d.tujuan || 'Kegiatan Delegasi'} (${countPeserta} Peserta)`
+            );
+          }
+        });
+      }
+      isFirstLoad = false;
     },
     (error) => {
       handleFirestoreError(error, OperationType.LIST, DELEGASI_COLLECTION);
@@ -134,15 +220,27 @@ export function subscribeAnggaran(
   onError?: (err: unknown) => void
 ) {
   const docRef = doc(db, CONFIG_COLLECTION, ANGGARAN_DOC);
+  let isFirstLoad = true;
+
   return onSnapshot(
     docRef,
     (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
-        onData(Number(data.saldoAnggaran) || 0);
+        const newSaldo = Number(data.saldoAnggaran) || 0;
+        onData(newSaldo);
+
+        if (!isFirstLoad) {
+          triggerAlert(
+            'anggaran',
+            'Anggaran MTK Diperbarui',
+            `Pagu anggaran disesuaikan menjadi Rp ${newSaldo.toLocaleString('id-ID')}`
+          );
+        }
       } else {
         onData(0);
       }
+      isFirstLoad = false;
     },
     (error) => {
       handleFirestoreError(error, OperationType.GET, `${CONFIG_COLLECTION}/${ANGGARAN_DOC}`);

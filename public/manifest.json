@@ -4,7 +4,7 @@
   "description": "Sistem Informasi & Manajemen Delegasi MTK, Anggaran, dan Pencatatan Real-time.",
   "start_url": "/",
   "scope": "/",
-  "id": "/?source=pwa",
+  "id": "/",
   "dir": "ltr",
   "lang": "id-ID",
   "display": "standalone",

@@ -13,10 +13,36 @@ export function triggerFileDownload(blob: Blob, filename: string) {
   a.style.display = 'none';
   document.body.appendChild(a);
   a.click();
+  // Keep object URL alive for 60 seconds so mobile download managers don't abort
   setTimeout(() => {
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, 300);
+    try {
+      if (document.body.contains(a)) {
+        document.body.removeChild(a);
+      }
+      URL.revokeObjectURL(url);
+    } catch {
+      // ignore
+    }
+  }, 60000);
+}
+
+// Helper to trigger direct download from Base64 Data URL (Highly reliable for mobile PNG images)
+export function downloadDataUrl(dataUrl: string, filename: string) {
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    try {
+      if (document.body.contains(a)) {
+        document.body.removeChild(a);
+      }
+    } catch {
+      // ignore
+    }
+  }, 2000);
 }
 
 // 1. Export Delegasi to Excel (.xlsx)
@@ -247,7 +273,7 @@ export function exportNotaPDF(delegasi: Delegasi, pesertaList: Peserta[]) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(255, 255, 255);
-  doc.text('NOTA PENGELUARAN DELEGASI MTK', 105, 31, { align: 'center' });
+  doc.text('NOTA PENGELUARAN DELEGASI', 105, 31, { align: 'center' });
 
   // Tujuan & Info Box
   doc.setDrawColor(203, 213, 225);

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Peserta } from '../types';
 import { exportPesertaCSV, downloadTemplatePesertaCSV } from '../utils/csv';
 import { ImportPesertaModal } from './ImportPesertaModal';
+import { TouchScrollContainer } from './TouchScrollContainer';
 import { 
   Users, 
   UserPlus, 
@@ -307,18 +308,18 @@ export const PesertaList: React.FC<PesertaListProps> = ({
         </div>
       </div>
 
-      {/* Table of Participants */}
+      {/* Table of Participants with Touch Swipe Support */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table id="table-peserta-list" className="w-full text-left text-xs">
+        <TouchScrollContainer id="scroll-container-peserta" hintText="Sentuh & geser tabel peserta ke kanan / kiri">
+          <table id="table-peserta-list" className="w-full text-left text-xs min-w-[620px]">
             <thead className="bg-slate-50 text-slate-600 border-b border-slate-200/80">
               <tr>
-                <th className="p-3.5 font-semibold uppercase tracking-wider">ID PPS</th>
-                <th className="p-3.5 font-semibold uppercase tracking-wider">Nama Lengkap</th>
-                <th className="p-3.5 font-semibold uppercase tracking-wider">Domisili</th>
-                <th className="p-3.5 font-semibold uppercase tracking-wider">Kelas</th>
-                <th className="p-3.5 font-semibold uppercase tracking-wider">Jabatan</th>
-                <th className="p-3.5 font-semibold uppercase tracking-wider text-center w-32">Aksi</th>
+                <th className="p-2.5 sm:p-3 font-semibold uppercase tracking-wider text-[11px]">ID PPS</th>
+                <th className="p-2.5 sm:p-3 font-semibold uppercase tracking-wider text-[11px]">Nama Lengkap</th>
+                <th className="p-2.5 sm:p-3 font-semibold uppercase tracking-wider text-[11px]">Domisili</th>
+                <th className="p-2.5 sm:p-3 font-semibold uppercase tracking-wider text-[11px]">Kelas</th>
+                <th className="p-2.5 sm:p-3 font-semibold uppercase tracking-wider text-[11px]">Jabatan</th>
+                <th className="p-2.5 sm:p-3 font-semibold uppercase tracking-wider text-center w-28 text-[11px]">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
@@ -330,7 +331,7 @@ export const PesertaList: React.FC<PesertaListProps> = ({
                       <p className="text-xs font-medium">Tidak ada data peserta ditemukan.</p>
                       <button
                         onClick={() => setIsImportModalOpen(true)}
-                        className="text-xs text-emerald-700 font-bold hover:underline"
+                        className="text-xs text-emerald-700 font-bold hover:underline cursor-pointer"
                       >
                         Impor data peserta dalam jumlah banyak
                       </button>
@@ -341,31 +342,31 @@ export const PesertaList: React.FC<PesertaListProps> = ({
                 filteredList.map((p) => {
                   return (
                     <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="p-3.5 font-mono font-bold text-slate-800">
+                      <td className="p-2.5 sm:p-3 font-mono font-bold text-slate-800 whitespace-nowrap">
                         <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md border border-slate-200 text-[11px]">
                           {p.id}
                         </span>
                       </td>
-                      <td className="p-3.5 font-semibold text-slate-800">{p.nama}</td>
-                      <td className="p-3.5 text-slate-600">
+                      <td className="p-2.5 sm:p-3 font-semibold text-slate-800 whitespace-nowrap">{p.nama}</td>
+                      <td className="p-2.5 sm:p-3 text-slate-600 whitespace-nowrap">
                         <span className="flex items-center gap-1.5">
-                          <Building className="w-3.5 h-3.5 text-slate-400" />
+                          <Building className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           {p.domisili || '-'}
                         </span>
                       </td>
-                      <td className="p-3.5 text-slate-600">
+                      <td className="p-2.5 sm:p-3 text-slate-600 whitespace-nowrap">
                         <span className="flex items-center gap-1.5">
-                          <GraduationCap className="w-3.5 h-3.5 text-slate-400" />
+                          <GraduationCap className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           {p.kelas || '-'}
                         </span>
                       </td>
-                      <td className="p-3.5 text-slate-600">
-                        <span className="inline-flex items-center gap-1.5 bg-slate-50 text-slate-700 px-2.5 py-1 rounded-md text-[11px] font-medium border border-slate-200/70">
-                          <Briefcase className="w-3 h-3 text-slate-400" />
+                      <td className="p-2.5 sm:p-3 text-slate-600 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 bg-slate-50 text-slate-700 px-2 py-0.5 rounded text-[11px] font-medium border border-slate-200/70">
+                          <Briefcase className="w-3 h-3 text-slate-400 shrink-0" />
                           {p.jabatan || 'Anggota'}
                         </span>
                       </td>
-                      <td className="p-3.5 text-center">
+                      <td className="p-2.5 sm:p-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
                             id={`btn-edit-peserta-${p.id}`}
@@ -395,7 +396,7 @@ export const PesertaList: React.FC<PesertaListProps> = ({
               )}
             </tbody>
           </table>
-        </div>
+        </TouchScrollContainer>
       </div>
 
       {/* Edit Peserta Modal */}
