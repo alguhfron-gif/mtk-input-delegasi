@@ -88,38 +88,76 @@ tr, .hover-soft-card {
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Print CSS Rules */
+/* Print CSS Rules - Optimized for 58mm Thermal Printer & Standard Printers */
 @media print {
   @page {
     size: 58mm auto;
-    margin: 2mm;
+    margin: 0;
   }
 
-  body {
-    background: white !important;
-    color: black !important;
+  html, body {
+    width: 58mm !important;
+    max-width: 58mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
     margin: 0 !important;
     padding: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide entire interface by default */
+  body * {
+    visibility: hidden !important;
+  }
+
+  /* Make ONLY the printable receipt and its contents visible */
+  #printable-nota,
+  #printable-nota * {
+    visibility: visible !important;
+  }
+
+  /* Position receipt at top-left of printed page */
+  #printable-nota {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 58mm !important;
+    max-width: 58mm !important;
+    min-width: 58mm !important;
+    margin: 0 !important;
+    padding: 2mm 1mm 4mm 1mm !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Completely neutralize modal fixed positioning and dark translucent backdrop */
+  .fixed,
+  [class*="backdrop-blur"],
+  [class*="bg-slate-900"],
+  #modal-nota-container {
+    position: static !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
 
   .no-print,
   #app-sidebar,
   header {
     display: none !important;
-  }
-
-  main {
-    margin: 0 !important;
-    padding: 0 !important;
-    max-width: 100% !important;
-  }
-
-  #printable-nota {
-    width: 58mm !important;
-    max-width: 58mm !important;
-    padding: 2mm !important;
-    margin: 0 auto !important;
-    box-shadow: none !important;
-    border: none !important;
   }
 }

@@ -41,14 +41,16 @@ function wrapText(
 
 /**
  * Generates an authentic 58mm Thermal Store Receipt (Struk Kasir 58mm) Canvas.
- * Width: 480px (Standard high-resolution 58mm thermal paper roll).
- * Height: Automatically calculated based on items & content.
- * 100% Solid White background with pure RGB for flawless Android/iOS gallery indexing.
+ * Base Width: 480px.
+ * High-Resolution Scaling: scale: 3 (1440px) or scale: 4 (1920px) for razor-sharp text in mobile/laptop galleries.
+ * 100% Solid White background (#ffffff) with pure RGB for flawless Android/iOS gallery indexing in Dark Mode.
  */
 export async function generateNotaCanvas(
   delegasi: Delegasi,
-  pesertaList: Peserta[]
+  pesertaList: Peserta[],
+  options?: { scale?: number; backgroundColor?: string }
 ): Promise<HTMLCanvasElement> {
+  const scale = options?.scale ?? 3;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('Canvas 2D context not supported');
@@ -60,7 +62,7 @@ export async function generateNotaCanvas(
 
   const totalSisa = delegasi.uangDibawa - delegasi.uangTerpakai;
 
-  // 58mm Thermal Receipt Dimensions (480px width @ high-dpi)
+  // 58mm Thermal Receipt Dimensions (480px width base)
   const canvasWidth = 480;
   const paddingX = 24;
   const contentWidth = canvasWidth - paddingX * 2; // 432px
@@ -83,7 +85,7 @@ export async function generateNotaCanvas(
     itemsHeight = 30;
   }
 
-  // Calculate total canvas height
+  // Calculate total canvas base height
   const baseHeight =
     20 + // top padding
     70 + // logo (60px) + gap
@@ -111,12 +113,19 @@ export async function generateNotaCanvas(
     45 + // footer / barcode / thanks
     35; // bottom paper teeth
 
-  canvas.width = canvasWidth;
-  canvas.height = Math.max(baseHeight, 600);
+  const finalBaseHeight = Math.max(baseHeight, 600);
 
-  // 1. Fill 100% Solid White Paper Background (No alpha channel to avoid Gallery decoding bugs)
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, canvasWidth, canvas.height);
+  // Set real pixel resolution according to scale (Scale 3 = 1440px width, Scale 4 = 1920px width)
+  canvas.width = Math.round(canvasWidth * scale);
+  canvas.height = Math.round(finalBaseHeight * scale);
+
+  // 1. Fill 100% Solid White Paper Background (Pure RGB #ffffff to prevent dark mode transparency bugs)
+  const bgColor = options?.backgroundColor ?? '#FFFFFF';
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Scale context so all subsequent 2D drawing calls use base coordinate system
+  ctx.scale(scale, scale);
 
   let currentY = 22;
 
@@ -368,16 +377,70 @@ export async function generateNotaCanvas(
 
   ctx.fillStyle = '#F3F4F6';
   ctx.beginPath();
-  ctx.moveTo(0, canvas.height);
-  ctx.lineTo(0, canvas.height - toothHeight);
+  ctx.moveTo(0, finalBaseHeight);
+  ctx.lineTo(0, finalBaseHeight - toothHeight);
   for (let i = 0; i < numTeeth; i++) {
     const x = i * toothWidth;
-    ctx.lineTo(x + toothWidth / 2, canvas.height - toothHeight * 2);
-    ctx.lineTo(x + toothWidth, canvas.height - toothHeight);
+    ctx.lineTo(x + toothWidth / 2, finalBaseHeight - toothHeight * 2);
+    ctx.lineTo(x + toothWidth, finalBaseHeight - toothHeight);
   }
-  ctx.lineTo(canvasWidth, canvas.height);
+  ctx.lineTo(canvasWidth, finalBaseHeight);
   ctx.closePath();
   ctx.fill();
 
   return canvas;
+}
+
+/**
+ * Downloads the 58mm Receipt directly as high-resolution PNG image ('image/png')
+ * with solid white background (#ffffff), scale: 3 or 4, and reliable anchor download trigger.
+ */
+export async function downloadNotaCanvasPNG(
+  delegasi: Delegasi,
+  pesertaList: Peserta[],
+  fileName: string = 'Nota_Pembayaran.png',
+  options?: { scale?: number; backgroundColor?: string }
+): Promise<{ success: boolean; dataUrl: string; blob: Blob | null }> {
+  const canvas = await generateNotaCanvas(delegasi, pesertaList, options);
+  const dataUrl = canvas.toDataURL('image/png', 1.0);
+  const safeFileName = fileName.toLowerCase().endsWith('.png') ? fileName : `${fileName}.png`;
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      try {
+        let finalBlob = blob;
+        if (!finalBlob) {
+          // Fallback from dataUrl if toBlob fails
+          const byteCharacters = atob(dataUrl.split(',')[1]);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          finalBlob = new Blob([byteArray], { type: 'image/png' });
+        }
+
+        const blobUrl = URL.createObjectURL(finalBlob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = safeFileName;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+
+        setTimeout(() => {
+          try {
+            if (document.body.contains(link)) {
+              document.body.removeChild(link);
+            }
+            URL.revokeObjectURL(blobUrl);
+          } catch {}
+        }, 3000);
+
+        resolve({ success: true, dataUrl, blob: finalBlob });
+      } catch (err) {
+        reject(err);
+      }
+    }, 'image/png');
+  });
 }

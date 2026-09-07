@@ -49,12 +49,10 @@ export async function downloadNotaPNG(
     scale: scale,
     backgroundColor: backgroundColor,
     useCORS: true,
-    allowTaint: true,
+    allowTaint: false,
     logging: false,
     scrollX: 0,
     scrollY: 0,
-    windowWidth: document.documentElement.offsetWidth,
-    windowHeight: document.documentElement.offsetHeight,
     onclone: (clonedDoc) => {
       // Dapatkan elemen nota pada DOM hasil kloning
       const clonedElement = typeof elementOrId === 'string'
@@ -162,12 +160,10 @@ export async function renderNotaPreviewPNG(
     scale: scale,
     backgroundColor: '#ffffff',
     useCORS: true,
-    allowTaint: true,
+    allowTaint: false,
     logging: false,
     scrollX: 0,
     scrollY: 0,
-    windowWidth: document.documentElement.offsetWidth,
-    windowHeight: document.documentElement.offsetHeight,
     onclone: (clonedDoc) => {
       const clonedElement = typeof elementOrId === 'string'
         ? clonedDoc.getElementById(elementOrId)
