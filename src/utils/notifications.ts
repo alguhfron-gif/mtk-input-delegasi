@@ -79,24 +79,42 @@ export function sendSystemNotification(title: string, body: string) {
   if (!('Notification' in window)) return;
 
   if (Notification.permission === 'granted') {
-    try {
-      new Notification(title, {
-        body,
-        icon: '/icon-192.png',
-        badge: '/icon-192.png',
-        tag: 'mtk-alert-' + Date.now()
-      });
-    } catch (e) {
-      // Fallback for Android Chrome ServiceWorker
-      if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
-        navigator.serviceWorker.ready.then((registration) => {
-          registration.showNotification(title, {
-            body,
-            icon: '/icon-192.png',
-            badge: '/icon-192.png'
-          });
-        }).catch(() => {});
+    // Getar HP jika perangkat mendukung
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate([150, 70, 150]);
+      } catch {
+        // ignore
       }
+    }
+
+    const options = {
+      body,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      vibrate: [150, 70, 150],
+      tag: 'mtk-alert-' + Date.now(),
+      renotify: true
+    };
+
+    // 1. Coba via ServiceWorker terlebih dahulu (Paling ampuh di HP Android saat di latar belakang)
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then((registration) => {
+        registration.showNotification(title, options).catch(() => {
+          // Fallback ke window Notification jika ServiceWorker gagal
+          try {
+            new Notification(title, options);
+          } catch {}
+        });
+      }).catch(() => {
+        try {
+          new Notification(title, options);
+        } catch {}
+      });
+    } else {
+      try {
+        new Notification(title, options);
+      } catch {}
     }
   }
 }

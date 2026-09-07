@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Delegasi, Peserta, PageView } from '../types';
 import { formatRupiah, getHijriInfo, formatTanggalMasehi, formatTanggalHijri } from '../utils/format';
+import { ComponentErrorBoundary } from './ErrorBoundary';
 import {
   ResponsiveContainer,
   BarChart,
@@ -113,6 +114,43 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
     kegiatanList: Delegasi[];
   } | null>(null);
 
+  // Tangani tombol kembali HP & ESC saat modal rincian kegiatan terbuka
+  useEffect(() => {
+    if (!selectedMonthKegiatanModal) return;
+
+    try {
+      window.history.pushState({ modal: 'monthKegiatan' }, '');
+    } catch {
+      // ignore
+    }
+
+    const handlePopState = () => {
+      setSelectedMonthKegiatanModal(null);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedMonthKegiatanModal(null);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedMonthKegiatanModal]);
+
+  const handleCloseKegiatanModal = useCallback(() => {
+    if (window.history.state?.modal === 'monthKegiatan') {
+      window.history.back();
+    } else {
+      setSelectedMonthKegiatanModal(null);
+    }
+  }, []);
+
   const toggleMonthDelegates = (monthIdx: number) => {
     setExpandedMonthDelegates(prev => ({
       ...prev,
@@ -171,10 +209,28 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
             if (Array.isArray(d.peserta)) {
               d.peserta.forEach(pid => {
                 if (!pid) return;
-                const p = pesertaList.find(x => x.id === pid || x.nama.toLowerCase() === pid.toLowerCase());
-                const pId = p ? p.id : pid;
-                const pNama = p ? p.nama : pid;
-                const existing = targetMonth.pesertaListMonth.find(x => x.id === pId || x.nama.toLowerCase() === pNama.toLowerCase());
+                const pidStr = typeof pid === 'object' && pid !== null
+                  ? String((pid as any).nama || (pid as any).id || '').trim()
+                  : String(pid || '').trim();
+                if (!pidStr) return;
+
+                const p = pesertaList.find(x => {
+                  if (!x) return false;
+                  const xId = x.id ? String(x.id).toLowerCase() : '';
+                  const xNama = x.nama ? String(x.nama).toLowerCase() : '';
+                  const target = pidStr.toLowerCase();
+                  return xId === target || xNama === target;
+                });
+
+                const pId = p?.id || pidStr;
+                const pNama = p?.nama || pidStr;
+                const existing = targetMonth.pesertaListMonth.find(x => {
+                  const xId = x.id ? String(x.id).toLowerCase() : '';
+                  const xNama = x.nama ? String(x.nama).toLowerCase() : '';
+                  const target = pNama.toLowerCase();
+                  return xId === target || xNama === target;
+                });
+
                 if (existing) {
                   existing.count += 1;
                 } else {
@@ -1170,7 +1226,12 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
 
       {/* Modal Rincian Semua Kegiatan Bulan Ini */}
       {selectedMonthKegiatanModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-fadeIn">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleCloseKegiatanModal();
+          }}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-fadeIn"
+        >
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden animate-scaleUp">
             
             {/* Modal Header */}
@@ -1181,100 +1242,143 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
                 </span>
                 <div>
                   <h3 className="font-bold text-slate-800 text-base sm:text-lg">
-                    Rincian Kegiatan Bulan {selectedMonthKegiatanModal.bulanFull}
+                    Rincian Kegiatan Bulan {selectedMonthKegiatanModal.bulanFull || '-'}
                   </h3>
                   <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                    <span>Total: <strong>{selectedMonthKegiatanModal.totalKegiatan} Kegiatan</strong></span>
+                    <span>Total: <strong>{selectedMonthKegiatanModal.totalKegiatan || 0} Kegiatan</strong></span>
                     <span>•</span>
-                    <span>Pengeluaran: <strong className="text-teal-800 font-mono">{formatRupiah(selectedMonthKegiatanModal.uangTerpakai)}</strong></span>
+                    <span>Pengeluaran: <strong className="text-teal-800 font-mono">{formatRupiah(selectedMonthKegiatanModal.uangTerpakai || 0)}</strong></span>
                   </div>
                 </div>
               </div>
 
               <button
                 type="button"
-                onClick={() => setSelectedMonthKegiatanModal(null)}
+                onClick={handleCloseKegiatanModal}
                 className="p-1.5 rounded-xl hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                title="Tutup (Kembali)"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Modal Body: Daftar Kegiatan */}
-            <div className="p-4 sm:p-5 overflow-y-auto space-y-3 divide-y divide-slate-100">
-              {selectedMonthKegiatanModal.kegiatanList.map((k, kIdx) => {
-                const sisa = Math.max(0, (k.uangDibawa || 0) - (k.uangTerpakai || 0));
-                return (
-                  <div key={k.id || kIdx} className={`pt-3 first:pt-0 space-y-2`}>
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                      <div className="flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-full bg-teal-100 text-teal-800 font-bold text-xs flex items-center justify-center font-mono">
-                          {kIdx + 1}
-                        </span>
-                        <span className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-teal-600" />
-                          <span>{k.tujuan}</span>
-                        </span>
-                      </div>
-
-                      <div className="text-right font-mono font-bold text-xs text-emerald-700">
-                        {formatRupiah(k.uangTerpakai || 0)}
-                      </div>
-                    </div>
-
-                    {/* Tanggal & Keuangan Info */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">Tgl Berangkat:</span>
-                        <span className="font-medium text-slate-700">{formatTanggalMasehi(k.tglBerangkat).split(',')[0]}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">Tgl Hijriah:</span>
-                        <span className="font-medium text-teal-700">{formatTanggalHijri(k.tglBerangkat).split(',')[0]}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">Uang Dibawa:</span>
-                        <span className="font-mono text-slate-600">{formatRupiah(k.uangDibawa || 0)}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">Sisa Kembali:</span>
-                        <span className="font-mono text-sky-700 font-semibold">{formatRupiah(sisa)}</span>
-                      </div>
-                    </div>
-
-                    {/* Delegasi yang Ditugaskan */}
-                    {Array.isArray(k.peserta) && k.peserta.length > 0 && (
-                      <div className="text-xs">
-                        <span className="text-slate-500 text-[11px] font-medium mr-1.5">Delegasi Bertugas:</span>
-                        <div className="inline-flex flex-wrap gap-1 mt-1">
-                          {k.peserta.map(pid => {
-                            const p = pesertaList.find(x => x.id === pid || x.nama.toLowerCase() === pid.toLowerCase());
-                            return (
-                              <span
-                                key={pid}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700 text-[11px] font-medium shadow-2xs"
-                              >
-                                <span>{p ? p.nama : pid}</span>
-                                {p && p.jabatan && (
-                                  <span className="text-[10px] text-slate-400">({p.jabatan})</span>
-                                )}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
+            <ComponentErrorBoundary 
+              fallbackTitle="Terjadi kesalahan saat memuat rincian kegiatan"
+              onReset={handleCloseKegiatanModal}
+            >
+              <div className="p-4 sm:p-5 overflow-y-auto space-y-3 divide-y divide-slate-100">
+                {(!selectedMonthKegiatanModal.kegiatanList || selectedMonthKegiatanModal.kegiatanList.length === 0) ? (
+                  <div className="py-8 text-center text-slate-400 text-xs">
+                    Belum ada data kegiatan untuk bulan ini.
                   </div>
-                );
-              })}
-            </div>
+                ) : (
+                  selectedMonthKegiatanModal.kegiatanList.map((k, kIdx) => {
+                    if (!k) return null;
+                    const sisa = Math.max(0, (k.uangDibawa || 0) - (k.uangTerpakai || 0));
+                    
+                    let masehiClean = '-';
+                    let hijriClean = '-';
+                    try {
+                      if (k.tglBerangkat) {
+                        const mStr = formatTanggalMasehi(k.tglBerangkat);
+                        if (mStr) masehiClean = mStr.split(',')[0] || mStr;
+                        const hStr = formatTanggalHijri(k.tglBerangkat);
+                        if (hStr) hijriClean = hStr.split(',')[0] || hStr;
+                      }
+                    } catch {
+                      masehiClean = String(k.tglBerangkat || '-');
+                    }
+
+                    const rawPeserta = Array.isArray(k.peserta) ? k.peserta : [];
+
+                    return (
+                      <div key={k.id || `keg-${kIdx}`} className="pt-3 first:pt-0 space-y-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-teal-100 text-teal-800 font-bold text-xs flex items-center justify-center font-mono shrink-0">
+                              {kIdx + 1}
+                            </span>
+                            <span className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                              <MapPin className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                              <span>{typeof k.tujuan === 'string' ? k.tujuan : 'Tujuan Kegiatan'}</span>
+                            </span>
+                          </div>
+
+                          <div className="text-right font-mono font-bold text-xs text-emerald-700">
+                            {formatRupiah(k.uangTerpakai || 0)}
+                          </div>
+                        </div>
+
+                        {/* Tanggal & Keuangan Info */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
+                          <div>
+                            <span className="text-slate-400 block text-[10px]">Tgl Berangkat:</span>
+                            <span className="font-medium text-slate-700">{masehiClean}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px]">Tgl Hijriah:</span>
+                            <span className="font-medium text-teal-700">{hijriClean}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px]">Uang Dibawa:</span>
+                            <span className="font-mono text-slate-600">{formatRupiah(k.uangDibawa || 0)}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px]">Sisa Kembali:</span>
+                            <span className="font-mono text-sky-700 font-semibold">{formatRupiah(sisa)}</span>
+                          </div>
+                        </div>
+
+                        {/* Delegasi yang Ditugaskan */}
+                        {rawPeserta.length > 0 && (
+                          <div className="text-xs">
+                            <span className="text-slate-500 text-[11px] font-medium mr-1.5">Delegasi Bertugas:</span>
+                            <div className="inline-flex flex-wrap gap-1 mt-1">
+                              {rawPeserta.map((pid, pIdx) => {
+                                const pidStr = typeof pid === 'object' && pid !== null 
+                                  ? String((pid as any).nama || (pid as any).id || `Peserta ${pIdx + 1}`) 
+                                  : String(pid || `Peserta ${pIdx + 1}`);
+
+                                const p = pesertaList.find(x => {
+                                  if (!x) return false;
+                                  const xId = x.id ? String(x.id).toLowerCase() : '';
+                                  const xNama = x.nama ? String(x.nama).toLowerCase() : '';
+                                  const target = pidStr.toLowerCase();
+                                  return xId === target || xNama === target;
+                                });
+
+                                const displayName = p?.nama || pidStr;
+                                const displayJabatan = p?.jabatan || null;
+
+                                return (
+                                  <span
+                                    key={`${pidStr}-${pIdx}`}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700 text-[11px] font-medium shadow-2xs"
+                                  >
+                                    <span>{displayName}</span>
+                                    {displayJabatan && (
+                                      <span className="text-[10px] text-slate-400">({displayJabatan})</span>
+                                    )}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </ComponentErrorBoundary>
 
             {/* Modal Footer */}
             <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
               <button
                 type="button"
-                onClick={() => setSelectedMonthKegiatanModal(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition-all cursor-pointer"
+                onClick={handleCloseKegiatanModal}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
               >
                 Tutup
               </button>

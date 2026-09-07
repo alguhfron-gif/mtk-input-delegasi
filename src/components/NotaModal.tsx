@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Delegasi, Peserta } from '../types';
 import { formatRupiah, formatTanggalMasehi, formatTanggalHijri } from '../utils/format';
 import { exportNotaPDF } from '../utils/exportUtils';
@@ -14,9 +14,8 @@ import {
   MessageSquare,
   Send,
   CheckCircle2,
-  ExternalLink,
-  Smartphone,
-  Info
+  Copy,
+  Check
 } from 'lucide-react';
 
 interface NotaModalProps {
@@ -37,23 +36,50 @@ export const NotaModal: React.FC<NotaModalProps> = ({
 }) => {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
   const [imageBlobJpg, setImageBlobJpg] = useState<Blob | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [showGalleryModal, setShowGalleryModal] = useState(false);
   const [waNumber, setWaNumber] = useState('082260978266');
   const [notification, setNotification] = useState<NotificationState | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const notifTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Tangani tombol kembali fisik/gesture HP agar menutup modal dengan aman tanpa blank screen
+  useEffect(() => {
+    try {
+      window.history.pushState({ modal: 'nota' }, '');
+    } catch {
+      // ignore
+    }
+
+    const handlePopState = () => {
+      onClose();
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
   if (!delegasi) return null;
 
-  const pesertaNames = delegasi.peserta.map(id => {
-    const p = pesertaList.find(x => x.id === id);
-    return p ? p.nama : id;
+  const rawPeserta = Array.isArray(delegasi.peserta) ? delegasi.peserta : [];
+  const pesertaNames = rawPeserta.map(id => {
+    const p = pesertaList.find(x => x.id === id || (x.nama && x.nama.toLowerCase() === String(id).toLowerCase()));
+    return p ? p.nama : String(id);
   });
 
-  const totalSisa = delegasi.uangDibawa - delegasi.uangTerpakai;
-  const fileBaseName = `Nota_58mm_Delegasi_${delegasi.id}_${delegasi.tujuan.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 15)}`;
+  const totalSisa = (delegasi.uangDibawa || 0) - (delegasi.uangTerpakai || 0);
+  const fileBaseName = `Nota_58mm_Delegasi_${delegasi.id}_${(delegasi.tujuan || 'Kegiatan').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 15)}`;
 
   // Tampilkan notifikasi dengan auto-hide 5 detik
   const showSuccessNotification = (title: string, message: string) => {
@@ -102,7 +128,8 @@ export const NotaModal: React.FC<NotaModalProps> = ({
   }, [delegasi, pesertaList]);
 
   // Format teks rapi struk 58mm untuk WhatsApp
-  const generateWhatsAppText = () => {
+  const generateWhatsAppText = useCallback(() => {
+    const rincianArr = Array.isArray(delegasi.rincian) ? delegasi.rincian : [];
     const lines = [
       `🧾 *NOTA PENGELUARAN DELEGASI (58mm)*`,
       `*PONDOK PESANTREN SIDOGIRI*`,
@@ -115,10 +142,10 @@ export const NotaModal: React.FC<NotaModalProps> = ({
       `*Delegasi  :* ${pesertaNames.join(', ')}`,
       `--------------------------------`,
       `*RINCIAN PENGELUARAN:*`,
-      ...delegasi.rincian.map((r, idx) => `${idx + 1}. ${r.nama} : ${formatRupiah(r.nominal)}`),
+      ...rincianArr.map((r, idx) => `${idx + 1}. ${r.nama} : ${formatRupiah(r.nominal)}`),
       `--------------------------------`,
-      `*Uang Dibawa   :* ${formatRupiah(delegasi.uangDibawa)}`,
-      `*Uang Terpakai :* ${formatRupiah(delegasi.uangTerpakai)}`,
+      `*Uang Dibawa   :* ${formatRupiah(delegasi.uangDibawa || 0)}`,
+      `*Uang Terpakai :* ${formatRupiah(delegasi.uangTerpakai || 0)}`,
       `================================`,
       totalSisa >= 0 
         ? `*SISA KEMBALI  : ${formatRupiah(totalSisa)}*`
@@ -129,7 +156,7 @@ export const NotaModal: React.FC<NotaModalProps> = ({
       `_Dicetak via Sistem MTK Sidogiri_`
     ].filter(Boolean);
     return lines.join('\n');
-  };
+  }, [delegasi, pesertaNames, totalSisa]);
 
   // Kirim ke WhatsApp (default: 082260978266)
   const handleSendToWhatsApp = (phone = waNumber) => {
@@ -144,47 +171,6 @@ export const NotaModal: React.FC<NotaModalProps> = ({
       );
     } catch (e) {
       console.error('Failed to open WhatsApp:', e);
-    }
-  };
-
-  // Buka gambar di Tab Baru (Luar Iframe) agar bisa langsung sentuh tahan & simpan di HP
-  const handleOpenImageInNewTab = () => {
-    try {
-      if (!previewImage) return;
-      const newTab = window.open('about:blank', '_blank');
-      if (newTab) {
-        newTab.document.write(`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Nota 58mm MTK - ${delegasi.tujuan}</title>
-              <style>
-                body { margin: 0; padding: 16px; background: #0f172a; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-                .banner { background: #065f46; color: #ecfdf5; padding: 14px 18px; border-radius: 12px; margin-bottom: 16px; max-width: 420px; width: 100%; box-sizing: border-box; text-align: center; font-size: 14px; line-height: 1.4; box-shadow: 0 4px 12px rgba(0,0,0,0.3); border: 1px solid #10b981; }
-                .banner strong { color: #6ee7b7; font-size: 15px; }
-                img { max-width: 100%; width: 380px; height: auto; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); background: white; }
-                .btn-row { margin-top: 18px; margin-bottom: 30px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-                .btn { display: inline-block; padding: 10px 20px; background: #059669; color: white; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
-                .btn:active { transform: scale(0.98); }
-              </style>
-            </head>
-            <body>
-              <div class="banner">
-                📱 <strong>Cara Simpan ke Galeri HP:</strong><br>
-                Sentuh &amp; tahan (tekan lama 1 detik) foto nota di bawah, lalu pilih <strong>"Simpan Gambar"</strong> atau <strong>"Download Gambar"</strong>.
-              </div>
-              <img src="${previewImage}" alt="Nota 58mm MTK" />
-              <div class="btn-row">
-                <a class="btn" href="${previewImage}" download="${fileBaseName}.jpg">⬇️ Unduh Berkas .JPG</a>
-              </div>
-            </body>
-          </html>
-        `);
-        newTab.document.close();
-      }
-    } catch (e) {
-      console.error('Error opening image in new tab:', e);
     }
   };
 
@@ -219,38 +205,63 @@ export const NotaModal: React.FC<NotaModalProps> = ({
       }
 
       showSuccessNotification(
-        'Berkas .JPG Sedang Diunduh!',
-        'Jika tidak otomatis muncul di album Galeri, periksa folder "Download" di File Manager atau sentuh & tahan foto untuk Simpan Gambar.'
+        'Nota Berhasil Diunduh!',
+        'File foto nota (.jpg) telah disimpan ke perangkat Anda dan siap dibuka di Galeri atau dibagikan.'
       );
     } catch (err) {
       console.error('Error direct download:', err);
     }
   };
 
-  // Bagikan via Native Share Sheet (Simpan ke Foto di iPhone, Share ke WhatsApp/Galeri di Android)
-  const handleNativeShare = async () => {
+  // Simpan ke Galeri / Bagikan via Native Share Sheet (Paling kompatibel di HP Android & iPhone)
+  const handleSaveToGalleryOrShare = async () => {
+    setIsSaving(true);
     try {
-      if (!imageBlobJpg) return;
-      const file = new File([imageBlobJpg], `${fileBaseName}.jpg`, { type: 'image/jpeg' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: `Nota 58mm Delegasi MTK - ${delegasi.tujuan}`,
-          text: `Nota Pengeluaran Delegasi MTK Sidogiri - ${delegasi.tujuan}`
-        });
-        showSuccessNotification(
-          'Berhasil Membagikan!',
-          'Nota delegasi telah dibagikan.'
-        );
-      } else {
-        handleSendToWhatsApp();
+      // Cek apakah browser mendukung Web Share API untuk file foto
+      if (imageBlobJpg && navigator.canShare) {
+        const file = new File([imageBlobJpg], `${fileBaseName}.jpg`, { type: 'image/jpeg' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: `Nota 58mm Delegasi MTK - ${delegasi.tujuan}`,
+            text: `Nota Pengeluaran Delegasi MTK Sidogiri - ${delegasi.tujuan}`
+          });
+          showSuccessNotification(
+            'Berhasil!',
+            'Nota delegasi telah dibagikan / disimpan ke Galeri HP.'
+          );
+          setIsSaving(false);
+          return;
+        }
       }
-    } catch (e) {
-      console.log('Share cancelled or not supported:', e);
+
+      // Fallback langsung unduh berkas JPG
+      handleDirectDownloadFile();
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') {
+        handleDirectDownloadFile();
+      }
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  // Print via browser/system dialog (dengan gaya ukuran kertas struk 58mm)
+  // Salin ringkasan teks nota ke clipboard
+  const handleCopyText = async () => {
+    try {
+      await navigator.clipboard.writeText(generateWhatsAppText());
+      setIsCopied(true);
+      showSuccessNotification(
+        'Teks Nota Disalin!',
+        'Ringkasan nota delegasi berhasil disalin ke papan klip.'
+      );
+      setTimeout(() => setIsCopied(false), 2500);
+    } catch {
+      // ignore
+    }
+  };
+
+  // Print via browser/system dialog
   const handlePrint = () => {
     try {
       window.print();
@@ -272,12 +283,24 @@ export const NotaModal: React.FC<NotaModalProps> = ({
     } catch (err) {
       console.error('Error generating PDF:', err);
       setIsGeneratingPDF(false);
-      alert('Gagal mengunduh PDF. Silakan gunakan tombol Simpan ke Galeri.');
+    }
+  };
+
+  const handleCloseSafely = () => {
+    if (window.history.state?.modal === 'nota') {
+      window.history.back();
+    } else {
+      onClose();
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div 
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleCloseSafely();
+      }}
+      className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto"
+    >
       {/* Modal Container */}
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200 animate-scaleUp my-2 sm:my-6 flex flex-col max-h-[96vh]">
         
@@ -296,14 +319,19 @@ export const NotaModal: React.FC<NotaModalProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
-            {/* Download Image Button (Phone Gallery / File) */}
+            {/* Tombol Simpan ke Galeri / Bagikan */}
             <button
               id="btn-download-nota-image"
-              onClick={() => setShowGalleryModal(true)}
-              className="px-3 py-1.5 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white"
-              title="Simpan sebagai gambar Struk 58mm di Galeri HP / Komputer"
+              onClick={handleSaveToGalleryOrShare}
+              disabled={isSaving || isGeneratingImage}
+              className="px-3 py-1.5 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
+              title="Simpan foto nota 58mm ke Galeri HP"
             >
-              <Download className="w-3.5 h-3.5" />
+              {isSaving || isGeneratingImage ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
               <span>Simpan ke Galeri</span>
             </button>
 
@@ -336,8 +364,9 @@ export const NotaModal: React.FC<NotaModalProps> = ({
 
             {/* Close Button */}
             <button
-              onClick={onClose}
+              onClick={handleCloseSafely}
               className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl cursor-pointer transition-colors"
+              title="Tutup Nota (Kembali)"
             >
               <X className="w-4 h-4" />
             </button>
@@ -403,9 +432,9 @@ export const NotaModal: React.FC<NotaModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={handleNativeShare}
+                onClick={handleSaveToGalleryOrShare}
                 className="p-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg flex items-center justify-center cursor-pointer transition-colors shrink-0 shadow-xs"
-                title="Bagikan berkas nota ke WhatsApp"
+                title="Bagikan foto nota"
               >
                 <Share2 className="w-3.5 h-3.5" />
               </button>
@@ -418,145 +447,118 @@ export const NotaModal: React.FC<NotaModalProps> = ({
           <div 
             id="printable-nota"
             className="w-full max-w-[340px] sm:max-w-[360px] bg-white text-slate-900 font-mono text-xs p-4 sm:p-5 shadow-md border border-slate-300 rounded-xl relative"
-            style={{
-              boxShadow: '0 4px 15px rgba(0,0,0,0.06)'
-            }}
           >
-            {/* Header Nota: Logo MTK & Identitas Pesantren */}
-            <div className="text-center space-y-1 pb-2">
-              <div className="flex justify-center mb-1.5">
-                <LogoMTK className="w-12 h-12 object-contain" />
+            {/* Header Struk Toko 58mm */}
+            <div className="text-center space-y-1">
+              <div className="flex justify-center mb-1">
+                <LogoMTK className="w-10 h-10 object-contain drop-shadow-xs" />
               </div>
-              <h2 className="font-black text-xs uppercase tracking-wider text-slate-900 leading-tight">
-                PONDOK PESANTREN SIDOGIRI
+              <h1 className="font-extrabold text-sm sm:text-base tracking-tight uppercase leading-tight text-slate-900">
+                Pondok Pesantren Sidogiri
+              </h1>
+              <h2 className="font-bold text-xs tracking-wider uppercase text-slate-800">
+                Taklimul Kitab (MTK)
               </h2>
-              <p className="font-bold text-[11px] text-slate-800 uppercase tracking-tight">
-                MTK (TAKLIMUL KITAB)
+              <p className="text-[10px] text-slate-600">
+                Sidogiri Pasuruan Jawa Timur 67103
               </p>
-              <p className="text-[9px] text-slate-500">
-                Pasuruan, Jawa Timur - Indonesia
+              <p className="text-[10px] text-slate-600 font-mono">
+                WA: 082260978266
               </p>
-              <div className="pt-1">
-                <span className="font-black text-[11px] bg-slate-900 text-white px-2 py-0.5 rounded uppercase tracking-wider inline-block">
-                  NOTA PENGELUARAN DELEGASI
-                </span>
-              </div>
             </div>
 
-            {/* Separator Double Line */}
-            <div className="border-t-2 border-dashed border-slate-800 my-2" />
+            {/* Separator Dotted Line */}
+            <div className="border-t border-dashed border-slate-400 my-2.5 pt-1" />
 
-            {/* Metadata Ringkas Struk 58mm */}
-            <div className="space-y-1 text-[11px] leading-tight">
+            <div className="text-center font-bold text-[11px] uppercase tracking-wide text-slate-800 pb-1">
+              *** BUKTI PENGELUARAN DELEGASI ***
+            </div>
+
+            {/* Metadata Struk */}
+            <div className="space-y-0.5 text-[11px] leading-tight">
               <div className="flex justify-between">
-                <span className="text-slate-500 font-bold">No. Bukti</span>
+                <span className="text-slate-500">No. Bukti:</span>
                 <span className="font-bold font-mono">#DEL-{String(delegasi.id).padStart(4, '0')}</span>
               </div>
-
               <div className="flex justify-between">
-                <span className="text-slate-500">Berangkat</span>
-                <span className="font-bold">{formatTanggalMasehi(delegasi.tglBerangkat).split(',')[0]}</span>
+                <span className="text-slate-500">Tujuan:</span>
+                <span className="font-bold text-right truncate max-w-[190px]">{delegasi.tujuan}</span>
               </div>
-              <div className="text-right text-[10px] text-teal-800 font-medium">
-                ({formatTanggalHijri(delegasi.tglBerangkat).split(',')[0]})
+              <div className="flex justify-between">
+                <span className="text-slate-500">Tgl Berangkat:</span>
+                <span className="text-right">
+                  {formatTanggalMasehi(delegasi.tglBerangkat).split(',')[0]}
+                </span>
               </div>
-
+              <div className="flex justify-between text-[10px] text-teal-800">
+                <span className="text-slate-500">Tgl Hijriah:</span>
+                <span className="text-right">
+                  {formatTanggalHijri(delegasi.tglBerangkat).split(',')[0]}
+                </span>
+              </div>
               {delegasi.tglKembali && (
-                <>
-                  <div className="flex justify-between pt-0.5">
-                    <span className="text-slate-500">Kembali</span>
-                    <span className="font-bold">{formatTanggalMasehi(delegasi.tglKembali).split(',')[0]}</span>
-                  </div>
-                  <div className="text-right text-[10px] text-teal-800 font-medium">
-                    ({formatTanggalHijri(delegasi.tglKembali).split(',')[0]})
-                  </div>
-                </>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Tgl Kembali:</span>
+                  <span className="text-right">
+                    {formatTanggalMasehi(delegasi.tglKembali).split(',')[0]}
+                  </span>
+                </div>
               )}
-
-              <div className="pt-1">
-                <span className="text-slate-500 block">Tujuan Kegiatan:</span>
-                <span className="font-bold text-slate-900 block mt-0.5 text-xs">
-                  {delegasi.tujuan}
-                </span>
-              </div>
-
-              <div className="pt-1">
-                <span className="text-slate-500 block">
-                  Anggota Delegasi ({delegasi.peserta.length} Orang):
-                </span>
-                <span className="text-slate-800 block mt-0.5 font-medium leading-snug">
+              <div className="flex justify-between pt-0.5">
+                <span className="text-slate-500">Delegasi:</span>
+                <span className="text-right font-medium text-[10px] max-w-[190px] truncate">
                   {pesertaNames.join(', ')}
                 </span>
               </div>
             </div>
 
-            {/* Separator Dotted Line */}
-            <div className="border-t border-dashed border-slate-400 my-2.5" />
+            {/* Separator Line */}
+            <div className="border-t border-dashed border-slate-400 my-2 pt-1" />
 
-            {/* Rincian Pengeluaran POS 58mm */}
-            <div>
-              <div className="font-black uppercase text-[10px] tracking-wider text-slate-700 mb-1.5">
-                RINCIAN PENGELUARAN:
-              </div>
-
-              <div className="space-y-1.5 text-[11px]">
-                {delegasi.rincian.length === 0 ? (
-                  <p className="text-slate-400 italic text-center py-1 text-[10px]">
-                    Tidak ada rincian pos pengeluaran
-                  </p>
-                ) : (
-                  delegasi.rincian.map((item, idx) => (
-                    <div key={idx} className="flex justify-between items-start gap-2">
-                      <span className="leading-tight text-slate-800">
-                        {idx + 1}. {item.nama}
-                      </span>
-                      <span className="font-bold font-mono text-slate-900 shrink-0">
-                        {formatRupiah(item.nominal)}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
+            {/* Rincian Header */}
+            <div className="flex justify-between font-bold text-[10px] uppercase text-slate-700 pb-1">
+              <span>Item / Kebutuhan</span>
+              <span>Nominal</span>
             </div>
 
-            {/* Separator Dotted Line */}
-            <div className="border-t border-dashed border-slate-400 my-2.5" />
-
-            {/* Ringkasan Keuangan POS 58mm */}
+            {/* Rincian Item */}
             <div className="space-y-1 text-[11px]">
-              <div className="flex justify-between text-slate-700">
-                <span>Uang Saku Dibawa:</span>
-                <span className="font-bold font-mono text-slate-900">
-                  {formatRupiah(delegasi.uangDibawa)}
-                </span>
+              {(Array.isArray(delegasi.rincian) ? delegasi.rincian : []).map((item, index) => (
+                <div key={index} className="flex justify-between items-baseline gap-1">
+                  <span className="truncate max-w-[180px] text-slate-800">
+                    {index + 1}. {item.nama}
+                  </span>
+                  <span className="font-mono font-medium text-slate-900 whitespace-nowrap">
+                    {formatRupiah(item.nominal)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Separator Double/Solid */}
+            <div className="border-t-2 border-slate-700 my-2 pt-1.5 space-y-1 text-[11px]">
+              <div className="flex justify-between">
+                <span className="text-slate-600">Total Dibawa:</span>
+                <span className="font-mono font-bold">{formatRupiah(delegasi.uangDibawa || 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-600">Total Terpakai:</span>
+                <span className="font-mono font-bold text-slate-900">{formatRupiah(delegasi.uangTerpakai || 0)}</span>
               </div>
 
-              <div className="flex justify-between text-slate-700">
-                <span>Uang Terpakai:</span>
-                <span className="font-bold font-mono text-slate-900">
-                  {formatRupiah(delegasi.uangTerpakai)}
-                </span>
-              </div>
-
-              {/* Separator Double Line */}
-              <div className="border-t-2 border-dashed border-slate-800 my-1.5" />
-
-              {/* Sisa Kembali (Bold POS Struk) */}
-              <div className="flex justify-between items-center text-xs font-black py-0.5">
-                <span className={totalSisa >= 0 ? 'text-emerald-800' : 'text-red-700'}>
-                  {totalSisa >= 0 ? 'SISA KEMBALI:' : 'KEKURANGAN DANA:'}
-                </span>
-                <span className={`text-sm font-black font-mono ${totalSisa >= 0 ? 'text-emerald-800' : 'text-red-700'}`}>
+              {/* Sisa Kembali atau Kekurangan Kasir */}
+              <div className="border-t border-dashed border-slate-400 pt-1 flex justify-between font-bold text-xs">
+                <span>{totalSisa >= 0 ? 'SISA KEMBALI:' : 'KEKURANGAN:'}</span>
+                <span className={`font-mono text-xs ${totalSisa >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                   {formatRupiah(Math.abs(totalSisa))}
                 </span>
               </div>
+            </div>
 
-              <div className="border-t-2 border-dashed border-slate-800 my-1.5" />
-
-              <p className="text-[9px] italic text-slate-500 text-center">
-                {totalSisa >= 0 
-                  ? '*Sisa uang wajib disetorkan ke kas MTK' 
-                  : '*Memerlukan pencairan kas pengganti'}
+            {/* Terbilang */}
+            <div className="mt-2 p-1.5 bg-slate-50 border border-slate-200 rounded text-[9px] text-slate-600 italic leading-snug">
+              <p>
+                <strong>Ket:</strong> Pengeluaran delegasi telah diverifikasi dan dicatat pada sistem kas MTK.
               </p>
             </div>
 
@@ -607,6 +609,39 @@ export const NotaModal: React.FC<NotaModalProps> = ({
             />
           </div>
 
+          {/* Quick Action Bar under Receipt */}
+          <div className="w-full max-w-[360px] flex flex-wrap items-center justify-center gap-2 no-print pt-1">
+            {previewImage && (
+              <a
+                href={previewImage}
+                download={`${fileBaseName}.jpg`}
+                onClick={() => {
+                  showSuccessNotification(
+                    'Nota Berhasil Diunduh!',
+                    'File .JPG telah disimpan ke folder Download/Galeri perangkat Anda.'
+                  );
+                }}
+                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-xs transition-transform cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Unduh File .JPG</span>
+              </a>
+            )}
+
+            <button
+              type="button"
+              onClick={handleCopyText}
+              className="px-3 py-2 bg-white hover:bg-slate-50 active:scale-95 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 flex items-center gap-1.5 shadow-2xs transition-transform cursor-pointer"
+            >
+              {isCopied ? (
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+              ) : (
+                <Copy className="w-3.5 h-3.5 text-slate-500" />
+              )}
+              <span>{isCopied ? 'Tersalin' : 'Salin Teks Nota'}</span>
+            </button>
+          </div>
+
         </div>
 
         {/* Modal Bottom Bar */}
@@ -621,126 +656,6 @@ export const NotaModal: React.FC<NotaModalProps> = ({
           </span>
         </div>
       </div>
-
-      {/* ================================================================ */}
-      {/* POPUP KHUSUS: SIMPAN KE GALERI HP (PASTI BERHASIL & TERSIMPAN)   */}
-      {/* ================================================================ */}
-      {showGalleryModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-60 flex items-center justify-center p-3 overflow-y-auto animate-fadeIn">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 my-auto flex flex-col max-h-[95vh]">
-            
-            {/* Header Dialog */}
-            <div className="bg-[#1E293B] text-white px-4 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="p-1 rounded-lg bg-emerald-500 text-white">
-                  <Smartphone className="w-4 h-4" />
-                </span>
-                <div>
-                  <h3 className="font-bold text-sm text-white leading-tight">
-                    Simpan Nota ke Galeri HP
-                  </h3>
-                  <p className="text-[10px] text-slate-400">
-                    Format Foto Struk 58mm (.JPG)
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowGalleryModal(false)}
-                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl cursor-pointer transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Isi Dialog */}
-            <div className="p-4 overflow-y-auto flex flex-col items-center gap-3 bg-slate-50">
-              
-              {/* Petunjuk Praktis & Pasti Masuk Galeri */}
-              <div className="w-full bg-emerald-50 border-2 border-emerald-500/80 rounded-2xl p-3 text-emerald-950 space-y-1.5 shadow-xs">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse shrink-0" />
-                  <p className="font-extrabold text-xs text-emerald-900 uppercase tracking-wide">
-                    Cara Pasti Masuk ke Galeri HP:
-                  </p>
-                </div>
-                <p className="text-xs text-emerald-900 leading-snug">
-                  👉 <strong>Sentuh &amp; tahan (tekan lama 1 detik)</strong> foto nota di bawah, lalu pilih menu <strong>"Simpan Gambar"</strong> atau <strong>"Download Gambar"</strong>.
-                </p>
-                <p className="text-[11px] text-emerald-700 leading-tight">
-                  Foto akan langsung 100% tersimpan rapi di album Galeri HP Anda!
-                </p>
-              </div>
-
-              {/* Tampilan Foto Nota Siap Simpan */}
-              <div className="w-full flex justify-center p-2.5 bg-white rounded-2xl border border-slate-300 shadow-xs">
-                {previewImage ? (
-                  <div className="flex flex-col items-center">
-                    <img 
-                      src={previewImage} 
-                      alt="Nota 58mm MTK" 
-                      className="w-full max-w-[280px] sm:max-w-[320px] h-auto rounded-lg shadow-md border border-slate-200 cursor-pointer active:scale-95 transition-transform"
-                      title="Tekan lama foto untuk Simpan ke Galeri"
-                    />
-                    <p className="text-[10px] text-slate-500 font-medium mt-1.5 text-center">
-                      👆 Tekan lama foto di atas untuk Simpan ke Galeri
-                    </p>
-                  </div>
-                ) : (
-                  <div className="py-12 flex flex-col items-center gap-2 text-slate-400">
-                    <Loader2 className="w-6 h-6 animate-spin" />
-                    <span className="text-xs">Menyiapkan foto nota...</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Tombol-tombol Opsi Cadangan */}
-              <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                {/* Buka di Tab Baru (Luar Iframe) */}
-                <button
-                  type="button"
-                  onClick={handleOpenImageInNewTab}
-                  className="w-full py-2.5 px-3 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
-                >
-                  <ExternalLink className="w-4 h-4 text-emerald-400" />
-                  <span>Buka di Tab Baru</span>
-                </button>
-
-                {/* Unduh Otomatis File .JPG */}
-                <button
-                  type="button"
-                  onClick={handleDirectDownloadFile}
-                  className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Unduh File (.JPG)</span>
-                </button>
-              </div>
-
-              {/* Catatan Tambahan */}
-              <div className="w-full flex items-start gap-1.5 text-[10px] text-slate-500 pt-1 px-1">
-                <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                <p className="leading-snug">
-                  Jika tombol unduh berkas tersimpan di folder "Unduhan/Download" HP, Anda dapat memindahkannya ke Galeri atau cukup gunakan cara <strong>tekan lama foto</strong> di atas.
-                </p>
-              </div>
-
-            </div>
-
-            {/* Footer Dialog */}
-            <div className="p-3 bg-white border-t border-slate-200 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowGalleryModal(false)}
-                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl cursor-pointer transition-colors"
-              >
-                Tutup
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
 
     </div>
   );

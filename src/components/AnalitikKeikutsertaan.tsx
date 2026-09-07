@@ -95,10 +95,16 @@ export const AnalitikKeikutsertaan: React.FC<AnalitikKeikutsertaanProps> = ({
         d.peserta.forEach(pIdentifier => {
           if (!pIdentifier) return;
 
+          const pStr = typeof pIdentifier === 'object' && pIdentifier !== null
+            ? String((pIdentifier as any).nama || (pIdentifier as any).id || '').trim()
+            : String(pIdentifier || '').trim();
+          if (!pStr) return;
+
           // Cari anggota berdasarkan ID atau kesamaan nama
           let targetKey = '';
           for (const [id, stat] of map.entries()) {
-            if (id === pIdentifier || stat.nama.toLowerCase() === pIdentifier.toLowerCase()) {
+            const statNama = stat.nama ? String(stat.nama).toLowerCase() : '';
+            if (id === pStr || (statNama && statNama === pStr.toLowerCase())) {
               targetKey = id;
               break;
             }
@@ -106,10 +112,10 @@ export const AnalitikKeikutsertaan: React.FC<AnalitikKeikutsertaanProps> = ({
 
           // Jika ada anggota yang tercatat di delegasi tapi tidak ada di pesertaList, buatkan entri baru
           if (!targetKey) {
-            targetKey = pIdentifier;
+            targetKey = pStr;
             map.set(targetKey, {
               id: targetKey,
-              nama: pIdentifier,
+              nama: pStr,
               jabatan: 'Anggota',
               kelas: '-',
               domisili: '-',
