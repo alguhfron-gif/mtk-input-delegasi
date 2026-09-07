@@ -13,6 +13,13 @@ import { NotaModal } from './components/NotaModal';
 import { RealtimeNotificationBanner } from './components/RealtimeNotificationBanner';
 import { AndroidStudioGuideModal } from './components/AndroidStudioGuideModal';
 import { AutoUpdateManager } from './components/AutoUpdateManager';
+import {
+  initAppHistory,
+  pushPageToHistory,
+  registerBackHandler,
+  hasActiveBackHandlers,
+  executeTopBackHandler
+} from './utils/navigationHistory';
 import { 
   Menu, 
   Cloud, 
@@ -114,6 +121,132 @@ export default function App() {
   // Edit & Modal State
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [selectedNota, setSelectedNota] = useState<Delegasi | null>(null);
+  const [exitToastMessage, setExitToastMessage] = useState<string | null>(null);
+
+  // Central Navigation & Mobile Back Gesture Controller
+  useEffect(() => {
+    // 1. Inisialisasi pengaman history browser agar tombol back HP tidak keluar ke layar putih
+    initAppHistory(activePage);
+
+    let lastBackPressTime = 0;
+
+    const handlePopState = (event: PopStateEvent) => {
+      // Prioritas 1: Jika ada modal/overlay yang terdaftar di stack (Nota, Rincian, Import, Guide)
+      if (hasActiveBackHandlers()) {
+        const handled = executeTopBackHandler();
+        if (handled) return;
+      }
+
+      // Prioritas 2: Cek overlay internal App jika belum masuk stack
+      if (mobileOpen) {
+        setMobileOpen(false);
+        return;
+      }
+      if (selectedNota) {
+        setSelectedNota(null);
+        return;
+      }
+      if (isAndroidGuideOpen) {
+        setIsAndroidGuideOpen(false);
+        return;
+      }
+      if (isAutoUpdateModalOpen) {
+        setIsAutoUpdateModalOpen(false);
+        return;
+      }
+      if (editIndex !== null) {
+        setEditIndex(null);
+        return;
+      }
+
+      // Prioritas 3: Navigasi Antar Halaman (Kembali ke halaman sebelumnya)
+      const state = event.state;
+      if (state && state.mtkApp && state.page && !state.modal) {
+        setActivePage(state.page);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        // Pengaman: Jika sudah di ujung awal riwayat
+        if (activePage !== 'dashboard') {
+          // Selalu kembali ke Beranda (Dashboard) dengan mulus
+          setActivePage('dashboard');
+          window.history.pushState(
+            { mtkApp: true, page: 'dashboard', isGuard: true, timestamp: Date.now() },
+            '',
+            '?tab=dashboard'
+          );
+        } else {
+          // Pengguna sudah di Dashboard dan menggeser kembali
+          const now = Date.now();
+          if (now - lastBackPressTime < 2500) {
+            // Tekanan kedua dalam 2.5 detik -> Izinkan keluar aplikasi dengan bersih
+            return;
+          }
+
+          lastBackPressTime = now;
+          // Kunci kembali posisi agar tidak pernah muncul layar putih
+          window.history.pushState(
+            { mtkApp: true, page: 'dashboard', isGuard: true, timestamp: Date.now() },
+            '',
+            '?tab=dashboard'
+          );
+
+          // Tampilkan notifikasi toast pemandu
+          setExitToastMessage('Tekan kembali sekali lagi untuk keluar dari aplikasi');
+          setTimeout(() => {
+            setExitToastMessage(null);
+          }, 2500);
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activePage, mobileOpen, selectedNota, isAndroidGuideOpen, isAutoUpdateModalOpen, editIndex]);
+
+  // Daftarkan drawer mobile dan modal panduan ke stack back handler
+  useEffect(() => {
+    if (!mobileOpen) return;
+    return registerBackHandler('mobileDrawer', () => {
+      setMobileOpen(false);
+      return true;
+    });
+  }, [mobileOpen]);
+
+  useEffect(() => {
+    if (!isAndroidGuideOpen) return;
+    return registerBackHandler('androidGuideModal', () => {
+      setIsAndroidGuideOpen(false);
+      return true;
+    });
+  }, [isAndroidGuideOpen]);
+
+  useEffect(() => {
+    if (!isAutoUpdateModalOpen) return;
+    return registerBackHandler('autoUpdateModal', () => {
+      setIsAutoUpdateModalOpen(false);
+      return true;
+    });
+  }, [isAutoUpdateModalOpen]);
+
+  useEffect(() => {
+    if (editIndex === null) return;
+    return registerBackHandler('editDelegasiMode', () => {
+      setEditIndex(null);
+      return true;
+    });
+  }, [editIndex]);
+
+  const handleSelectPage = (page: PageView, pushHistory = true) => {
+    if (page === activePage) return;
+    if (page !== 'inputDelegasi' && editIndex !== null) {
+      setEditIndex(null);
+    }
+    if (pushHistory) {
+      pushPageToHistory(page);
+    }
+    setActivePage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   // -------------------------------------------------------------
   // Real-time Firebase Sync Across HP and Web
@@ -235,7 +368,7 @@ export default function App() {
       setDelegasiList(prev => [...prev, delegasiToSave]);
     }
 
-    setActivePage('riwayat');
+    handleSelectPage('riwayat');
 
     try {
       await saveDelegasiToFirestore(delegasiToSave);
@@ -246,12 +379,12 @@ export default function App() {
 
   const handleStartEditDelegasi = (index: number) => {
     setEditIndex(index);
-    setActivePage('inputDelegasi');
+    handleSelectPage('inputDelegasi');
   };
 
   const handleCancelEditDelegasi = () => {
     setEditIndex(null);
-    setActivePage('riwayat');
+    handleSelectPage('riwayat');
   };
 
   const handleDeleteDelegasi = async (index: number) => {
@@ -333,12 +466,7 @@ export default function App() {
       {/* Sidebar Navigation for Desktop */}
       <Sidebar
         activePage={activePage}
-        onSelectPage={(page) => {
-          if (page === 'inputDelegasi' && activePage !== 'inputDelegasi') {
-            setEditIndex(null);
-          }
-          setActivePage(page);
-        }}
+        onSelectPage={(page) => handleSelectPage(page)}
         mobileOpen={mobileOpen}
         setMobileOpen={setMobileOpen}
         onOpenAndroidGuide={() => setIsAndroidGuideOpen(true)}
@@ -419,7 +547,7 @@ export default function App() {
               pesertaList={pesertaList}
               delegasiList={delegasiList}
               saldoAnggaran={saldoAnggaran}
-              onNavigate={(page) => setActivePage(page)}
+              onNavigate={(page) => handleSelectPage(page)}
               onBackup={handleBackupDownload}
             />
           )}
@@ -458,7 +586,7 @@ export default function App() {
               delegasiList={delegasiList}
               pesertaList={pesertaList}
               saldoAnggaran={saldoAnggaran}
-              onNavigate={(page) => setActivePage(page)}
+              onNavigate={(page) => handleSelectPage(page)}
             />
           )}
 
@@ -481,15 +609,22 @@ export default function App() {
         </main>
       </div>
 
+      {/* Floating Exit Toast for Mobile Android Back Gesture */}
+      {exitToastMessage && (
+        <div 
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 bg-slate-900/95 backdrop-blur-md text-white text-xs font-semibold rounded-2xl shadow-2xl border border-slate-700/90 flex items-center gap-2 animate-fade-in pointer-events-none max-w-[90vw] text-center"
+        >
+          <Smartphone className="w-4 h-4 text-emerald-400 shrink-0 animate-bounce" />
+          <span>{exitToastMessage}</span>
+        </div>
+      )}
+
       {/* Mobile Bottom Navigation for HP */}
       <MobileNav
         activePage={activePage}
-        onSelectPage={(page) => {
-          if (page === 'inputDelegasi' && activePage !== 'inputDelegasi') {
-            setEditIndex(null);
-          }
-          setActivePage(page);
-        }}
+        onSelectPage={(page) => handleSelectPage(page)}
         onOpenMenu={() => setMobileOpen(true)}
         isHidden={isBottomNavHidden}
         onToggleHidden={handleToggleBottomNav}

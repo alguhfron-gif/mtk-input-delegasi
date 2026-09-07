@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Delegasi, Peserta } from '../types';
 import { 
   Database, 
@@ -20,6 +20,7 @@ import {
 import { batchImportPesertaToFirestore, saveDelegasiToFirestore, saveAnggaranToFirestore } from '../lib/firebase';
 import { FirestoreGuideModal } from './FirestoreGuideModal';
 import { AndroidStudioGuideModal } from './AndroidStudioGuideModal';
+import { registerBackHandler } from '../utils/navigationHistory';
 
 interface BackupTabProps {
   pesertaList: Peserta[];
@@ -38,6 +39,23 @@ export const BackupTab: React.FC<BackupTabProps> = ({
   const [syncSuccessMessage, setSyncSuccessMessage] = useState<string | null>(null);
   const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
   const [isAndroidModalOpen, setIsAndroidModalOpen] = useState(false);
+
+  // Tangani tombol kembali HP & gesture usap layar
+  useEffect(() => {
+    if (!isGuideModalOpen) return;
+    return registerBackHandler('firestoreGuideModal', () => {
+      setIsGuideModalOpen(false);
+      return true;
+    });
+  }, [isGuideModalOpen]);
+
+  useEffect(() => {
+    if (!isAndroidModalOpen) return;
+    return registerBackHandler('androidStudioModal', () => {
+      setIsAndroidModalOpen(false);
+      return true;
+    });
+  }, [isAndroidModalOpen]);
 
   const handleManualPushToFirebase = async () => {
     try {

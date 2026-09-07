@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Delegasi, Peserta, PageView } from '../types';
 import { formatRupiah, getHijriInfo, formatTanggalMasehi, formatTanggalHijri } from '../utils/format';
 import { ComponentErrorBoundary } from './ErrorBoundary';
+import { useModalBackHandler } from '../utils/navigationHistory';
 import {
   ResponsiveContainer,
   BarChart,
@@ -114,42 +115,17 @@ export const AnalitikKeuangan: React.FC<AnalitikKeuanganProps> = ({
     kegiatanList: Delegasi[];
   } | null>(null);
 
-  // Tangani tombol kembali HP & ESC saat modal rincian kegiatan terbuka
-  useEffect(() => {
-    if (!selectedMonthKegiatanModal) return;
-
-    try {
-      window.history.pushState({ modal: 'monthKegiatan' }, '');
-    } catch {
-      // ignore
-    }
-
-    const handlePopState = () => {
-      setSelectedMonthKegiatanModal(null);
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setSelectedMonthKegiatanModal(null);
-      }
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [selectedMonthKegiatanModal]);
-
-  const handleCloseKegiatanModal = useCallback(() => {
-    if (window.history.state?.modal === 'monthKegiatan') {
-      window.history.back();
-    } else {
-      setSelectedMonthKegiatanModal(null);
-    }
+  // Tangani tombol kembali HP & gesture pinggir layar dengan aman tanpa blank screen
+  const handleCloseModalCallback = useCallback(() => {
+    setSelectedMonthKegiatanModal(null);
   }, []);
+
+  const { safeClose: handleCloseKegiatanModal } = useModalBackHandler(
+    Boolean(selectedMonthKegiatanModal),
+    handleCloseModalCallback,
+    'monthKegiatan',
+    'analitik'
+  );
 
   const toggleMonthDelegates = (monthIdx: number) => {
     setExpandedMonthDelegates(prev => ({

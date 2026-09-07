@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Peserta } from '../types';
 import { exportPesertaCSV, downloadTemplatePesertaCSV } from '../utils/csv';
 import { ImportPesertaModal } from './ImportPesertaModal';
 import { TouchScrollContainer } from './TouchScrollContainer';
+import { registerBackHandler } from '../utils/navigationHistory';
 import { 
   Users, 
   UserPlus, 
@@ -50,6 +51,23 @@ export const PesertaList: React.FC<PesertaListProps> = ({
   // Edit Modal State
   const [editingPeserta, setEditingPeserta] = useState<Peserta | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Tangani tombol kembali HP & gesture usap layar saat modal import atau edit terbuka
+  useEffect(() => {
+    if (!isImportModalOpen) return;
+    return registerBackHandler('importPesertaModal', () => {
+      setIsImportModalOpen(false);
+      return true;
+    });
+  }, [isImportModalOpen]);
+
+  useEffect(() => {
+    if (!editingPeserta) return;
+    return registerBackHandler('editPesertaModal', () => {
+      setEditingPeserta(null);
+      return true;
+    });
+  }, [editingPeserta]);
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();

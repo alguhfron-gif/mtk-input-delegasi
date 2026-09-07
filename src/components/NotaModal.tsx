@@ -4,6 +4,7 @@ import { formatRupiah, formatTanggalMasehi, formatTanggalHijri } from '../utils/
 import { exportNotaPDF } from '../utils/exportUtils';
 import { generateNotaCanvas } from '../utils/notaCanvas';
 import { LogoMTK } from './LogoMTK';
+import { useModalBackHandler } from '../utils/navigationHistory';
 import { 
   Printer, 
   X, 
@@ -45,30 +46,13 @@ export const NotaModal: React.FC<NotaModalProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const notifTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Tangani tombol kembali fisik/gesture HP agar menutup modal dengan aman tanpa blank screen
-  useEffect(() => {
-    try {
-      window.history.pushState({ modal: 'nota' }, '');
-    } catch {
-      // ignore
-    }
-
-    const handlePopState = () => {
-      onClose();
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [onClose]);
+  // Tangani tombol kembali fisik/gesture HP agar menutup modal dengan mulus tanpa blank screen
+  const { safeClose: handleCloseSafely } = useModalBackHandler(
+    Boolean(delegasi),
+    onClose,
+    'nota',
+    'riwayat'
+  );
 
   if (!delegasi) return null;
 
@@ -283,14 +267,6 @@ export const NotaModal: React.FC<NotaModalProps> = ({
     } catch (err) {
       console.error('Error generating PDF:', err);
       setIsGeneratingPDF(false);
-    }
-  };
-
-  const handleCloseSafely = () => {
-    if (window.history.state?.modal === 'nota') {
-      window.history.back();
-    } else {
-      onClose();
     }
   };
 
