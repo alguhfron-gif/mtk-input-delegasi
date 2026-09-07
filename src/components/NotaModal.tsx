@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Delegasi, Peserta } from '../types';
 import { formatRupiah, formatTanggalMasehi, formatTanggalHijri } from '../utils/format';
 import { exportNotaPDF } from '../utils/exportUtils';
-import { generateNotaCanvas } from '../utils/notaCanvas';
+import { downloadNotaPNG, renderNotaPreviewPNG } from '../utils/notaImageExport';
 import { LogoMTK } from './LogoMTK';
 import { useModalBackHandler } from '../utils/navigationHistory';
 import { 
@@ -35,15 +35,14 @@ export const NotaModal: React.FC<NotaModalProps> = ({
   pesertaList,
   onClose
 }) => {
-  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
-  const [imageBlobJpg, setImageBlobJpg] = useState<Blob | null>(null);
+  const [imageBlobPng, setImageBlobPng] = useState<Blob | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [waNumber, setWaNumber] = useState('082260978266');
   const [notification, setNotification] = useState<NotificationState | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const notaReceiptRef = useRef<HTMLDivElement | null>(null);
   const notifTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Tangani tombol kembali fisik/gesture HP agar menutup modal dengan mulus tanpa blank screen
@@ -76,35 +75,26 @@ export const NotaModal: React.FC<NotaModalProps> = ({
     }, 5000);
   };
 
-  // Pre-render 58mm Canvas saat modal dibuka
+  // Generate preview PNG saat modal dibuka
   useEffect(() => {
     let isMounted = true;
-    const renderCanvas = async () => {
+    const timer = setTimeout(async () => {
       try {
-        setIsGeneratingImage(true);
-        const canvas = await generateNotaCanvas(delegasi, pesertaList);
-        if (!isMounted) return;
-        canvasRef.current = canvas;
-
-        // JPEG 96% solid white background - 100% kompatibel dengan galeri HP Android & iOS
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.96);
-        setPreviewImage(dataUrl);
-
-        canvas.toBlob((blob) => {
-          if (isMounted && blob) {
-            setImageBlobJpg(blob);
-          }
-          if (isMounted) setIsGeneratingImage(false);
-        }, 'image/jpeg', 0.96);
-      } catch (err) {
-        console.error('Error pre-rendering 58mm canvas:', err);
-        if (isMounted) setIsGeneratingImage(false);
+        const el = notaReceiptRef.current || document.getElementById('printable-nota');
+        if (!el || !isMounted) return;
+        const res = await renderNotaPreviewPNG(el, { scale: 3 });
+        if (isMounted) {
+          setPreviewImage(res.dataUrl);
+          setImageBlobPng(res.blob);
+        }
+      } catch (e) {
+        console.warn('Pratinjau awal ditunda:', e);
       }
-    };
+    }, 200);
 
-    renderCanvas();
     return () => {
       isMounted = false;
+      clearTimeout(timer);
       if (notifTimeoutRef.current) {
         clearTimeout(notifTimeoutRef.current);
       }
@@ -158,72 +148,89 @@ export const NotaModal: React.FC<NotaModalProps> = ({
     }
   };
 
-  // Unduh langsung berkas .JPG
-  const handleDirectDownloadFile = () => {
+  // Unduh langsung foto nota resolusi tinggi berformat PNG murni ('image/png')
+  const handleDownloadPNG = async () => {
+    setIsSaving(true);
     try {
-      const fileName = `${fileBaseName}.jpg`;
-      if (imageBlobJpg) {
-        const url = URL.createObjectURL(imageBlobJpg);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => {
-          try {
-            if (document.body.contains(a)) document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-          } catch {}
-        }, 15000);
-      } else if (previewImage) {
-        const a = document.createElement('a');
-        a.href = previewImage;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => {
-          try {
-            if (document.body.contains(a)) document.body.removeChild(a);
-          } catch {}
-        }, 3000);
-      }
+      const fileName = `${fileBaseName}.png`;
+      const targetEl = notaReceiptRef.current || document.getElementById('printable-nota');
+      if (!targetEl) throw new Error('Elemen nota tidak ditemukan');
+
+      // Ketentuan: scale: 4 (ultra-sharp anti-buram), backgroundColor: '#ffffff' (putih solid dark mode), tangkap utuh
+      const result = await downloadNotaPNG(targetEl, fileName, {
+        scale: 4,
+        backgroundColor: '#ffffff'
+      });
+
+      if (result.dataUrl) setPreviewImage(result.dataUrl);
+      if (result.blob) setImageBlobPng(result.blob);
 
       showSuccessNotification(
-        'Nota Berhasil Diunduh!',
-        'File foto nota (.jpg) telah disimpan ke perangkat Anda dan siap dibuka di Galeri atau dibagikan.'
+        'Nota PNG Berhasil Diunduh!',
+        'Foto nota resolusi tinggi (.png) telah berhasil diunduh dan tersimpan di Galeri HP Anda.'
       );
     } catch (err) {
-      console.error('Error direct download:', err);
+      console.error('Download PNG scale:4 error, mencoba fallback scale:3:', err);
+      try {
+        const fileName = `${fileBaseName}.png`;
+        const targetEl = notaReceiptRef.current || document.getElementById('printable-nota');
+        if (!targetEl) throw new Error('Elemen nota tidak ditemukan');
+
+        const result = await downloadNotaPNG(targetEl, fileName, {
+          scale: 3,
+          backgroundColor: '#ffffff'
+        });
+
+        if (result.dataUrl) setPreviewImage(result.dataUrl);
+        if (result.blob) setImageBlobPng(result.blob);
+
+        showSuccessNotification(
+          'Nota PNG Berhasil Diunduh!',
+          'Foto nota resolusi tinggi (.png) telah berhasil diunduh dan tersimpan di Galeri HP Anda.'
+        );
+      } catch (fallbackErr) {
+        console.error('Fallback PNG download failed:', fallbackErr);
+      }
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  // Simpan ke Galeri / Bagikan via Native Share Sheet (Paling kompatibel di HP Android & iPhone)
-  const handleSaveToGalleryOrShare = async () => {
+  // Bagikan via Native Share Sheet ke WhatsApp / Aplikasi lain atau unduh langsung
+  const handleSharePNG = async () => {
     setIsSaving(true);
     try {
-      // Cek apakah browser mendukung Web Share API untuk file foto
-      if (imageBlobJpg && navigator.canShare) {
-        const file = new File([imageBlobJpg], `${fileBaseName}.jpg`, { type: 'image/jpeg' });
+      const fileName = `${fileBaseName}.png`;
+      const targetEl = notaReceiptRef.current || document.getElementById('printable-nota');
+      
+      let blob = imageBlobPng;
+      if (!blob && targetEl) {
+        const res = await downloadNotaPNG(targetEl, fileName, { scale: 3, backgroundColor: '#ffffff' });
+        blob = res.blob;
+      }
+
+      if (blob && navigator.canShare) {
+        const file = new File([blob], fileName, { type: 'image/png' });
         if (navigator.canShare({ files: [file] })) {
           await navigator.share({
             files: [file],
             title: `Nota 58mm Delegasi MTK - ${delegasi.tujuan}`,
-            text: `Nota Pengeluaran Delegasi MTK Sidogiri - ${delegasi.tujuan}`
+            text: `Bukti Nota Pengeluaran Delegasi MTK Sidogiri - ${delegasi.tujuan}`
           });
           showSuccessNotification(
             'Berhasil!',
-            'Nota delegasi telah dibagikan / disimpan ke Galeri HP.'
+            'Nota delegasi (.png) telah dibagikan.'
           );
           setIsSaving(false);
           return;
         }
       }
 
-      // Fallback langsung unduh berkas JPG
-      handleDirectDownloadFile();
+      // Fallback langsung unduh file PNG
+      await handleDownloadPNG();
     } catch (e: any) {
       if (e?.name !== 'AbortError') {
-        handleDirectDownloadFile();
+        await handleDownloadPNG();
       }
     } finally {
       setIsSaving(false);
@@ -295,15 +302,15 @@ export const NotaModal: React.FC<NotaModalProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
-            {/* Tombol Simpan ke Galeri / Bagikan */}
+            {/* Tombol Simpan ke Galeri (PNG) */}
             <button
               id="btn-download-nota-image"
-              onClick={handleSaveToGalleryOrShare}
-              disabled={isSaving || isGeneratingImage}
-              className="px-3 py-1.5 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
-              title="Simpan foto nota 58mm ke Galeri HP"
+              onClick={handleDownloadPNG}
+              disabled={isSaving}
+              className="px-3 py-1.5 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60 active:scale-95"
+              title="Simpan foto nota 58mm resolusi tinggi (.PNG) ke Galeri HP"
             >
-              {isSaving || isGeneratingImage ? (
+              {isSaving ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <Download className="w-3.5 h-3.5" />
@@ -408,9 +415,10 @@ export const NotaModal: React.FC<NotaModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={handleSaveToGalleryOrShare}
-                className="p-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg flex items-center justify-center cursor-pointer transition-colors shrink-0 shadow-xs"
-                title="Bagikan foto nota"
+                onClick={handleSharePNG}
+                disabled={isSaving}
+                className="p-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg flex items-center justify-center cursor-pointer transition-colors shrink-0 shadow-xs disabled:opacity-60"
+                title="Bagikan foto nota (.PNG)"
               >
                 <Share2 className="w-3.5 h-3.5" />
               </button>
@@ -422,7 +430,8 @@ export const NotaModal: React.FC<NotaModalProps> = ({
           {/* ========================================================== */}
           <div 
             id="printable-nota"
-            className="w-full max-w-[340px] sm:max-w-[360px] bg-white text-slate-900 font-mono text-xs p-4 sm:p-5 shadow-md border border-slate-300 rounded-xl relative"
+            ref={notaReceiptRef}
+            className="w-full max-w-[340px] sm:max-w-[360px] bg-white text-slate-900 font-mono text-xs p-4 sm:p-5 pb-6 sm:pb-7 shadow-md border border-slate-300 rounded-xl relative select-none"
           >
             {/* Header Struk Toko 58mm */}
             <div className="text-center space-y-1">
@@ -587,34 +596,47 @@ export const NotaModal: React.FC<NotaModalProps> = ({
 
           {/* Quick Action Bar under Receipt */}
           <div className="w-full max-w-[360px] flex flex-wrap items-center justify-center gap-2 no-print pt-1">
-            {previewImage && (
-              <a
-                href={previewImage}
-                download={`${fileBaseName}.jpg`}
-                onClick={() => {
-                  showSuccessNotification(
-                    'Nota Berhasil Diunduh!',
-                    'File .JPG telah disimpan ke folder Download/Galeri perangkat Anda.'
-                  );
-                }}
-                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-xs transition-transform cursor-pointer"
-              >
+            <button
+              id="btn-unduh-png-bawah"
+              type="button"
+              onClick={handleDownloadPNG}
+              disabled={isSaving}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-xs transition-transform cursor-pointer disabled:opacity-60"
+              title="Unduh foto nota berformat PNG resolusi tinggi (.png) ke Galeri HP"
+            >
+              {isSaving ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
                 <Download className="w-3.5 h-3.5" />
-                <span>Unduh File .JPG</span>
-              </a>
-            )}
+              )}
+              <span>Unduh Foto (.PNG)</span>
+            </button>
 
             <button
+              id="btn-bagikan-nota-bawah"
+              type="button"
+              onClick={handleSharePNG}
+              disabled={isSaving}
+              className="px-3 py-2 bg-teal-700 hover:bg-teal-800 active:scale-95 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-xs transition-transform cursor-pointer disabled:opacity-60"
+              title="Bagikan file foto nota (.png) ke WhatsApp atau aplikasi lain"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Bagikan</span>
+            </button>
+
+            <button
+              id="btn-salin-teks-nota"
               type="button"
               onClick={handleCopyText}
               className="px-3 py-2 bg-white hover:bg-slate-50 active:scale-95 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 flex items-center gap-1.5 shadow-2xs transition-transform cursor-pointer"
+              title="Salin ringkasan teks nota ke papan klip"
             >
               {isCopied ? (
                 <Check className="w-3.5 h-3.5 text-emerald-600" />
               ) : (
                 <Copy className="w-3.5 h-3.5 text-slate-500" />
               )}
-              <span>{isCopied ? 'Tersalin' : 'Salin Teks Nota'}</span>
+              <span>{isCopied ? 'Tersalin' : 'Salin Teks'}</span>
             </button>
           </div>
 
@@ -628,7 +650,7 @@ export const NotaModal: React.FC<NotaModalProps> = ({
           </span>
           <span className="hidden sm:inline text-slate-300">•</span>
           <span className="text-[11px]">
-            File Gambar (.JPG) & PDF 58mm siap cetak ke Bluetooth Thermal Printer
+            File Gambar (.PNG) Resolusi Tinggi & PDF 58mm siap cetak ke Bluetooth Thermal Printer
           </span>
         </div>
       </div>
